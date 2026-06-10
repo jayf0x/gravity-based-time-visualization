@@ -137,6 +137,14 @@ def write_outputs(elev, out_dir, source):
     # 8-bit copy for easy texture use in WebGL (16-bit PNG support is spotty)
     Image.fromarray((norm / 257).astype(np.uint8), mode="L").save(out_dir / "heightmap_8bit.png")
 
+    # full 16-bit precision packed into an ordinary RGB PNG: R = high byte,
+    # G = low byte. WebGL/canvas decode this losslessly everywhere:
+    #   meters = min + ((R*256 + G) / 65535) * (max - min)
+    rg = np.zeros((*norm.shape, 3), dtype=np.uint8)
+    rg[..., 0] = (norm >> 8).astype(np.uint8)
+    rg[..., 1] = (norm & 0xFF).astype(np.uint8)
+    Image.fromarray(rg, mode="RGB").save(out_dir / "heightmap_rg16.png")
+
     meta = {
         "source": source,
         "projection": "equirectangular",

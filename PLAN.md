@@ -27,7 +27,31 @@
 - Verified end-to-end via headless Chrome screenshots: coastlines, the
   Mid-Atlantic Ridge seam, and the trench-red Pacific all read clearly.
 
+### Session 2 (2026-06-10) — HQ clarity upgrade ✅
+- **Data**: pipeline bumped to z=4 (4096×2048, −10,467…+6,727 m). New
+  `heightmap_rg16.png` (R=high/G=low byte) gives lossless 16-bit elevation on
+  GPU *and* CPU — the 8-bit sampling debt is gone (HUD + shaders both decode it).
+- **Particles removed** → replaced with the **volumetric gravity fog**
+  (raymarched 3D value-noise volume on a backside shell, radial domain-shift
+  advection ~1/r², axis twist, near-planet nonlinear density boost, sun/moon
+  alignment pulse, ray-clipped against the globe; 36 jittered steps).
+- **Surface clarity**: heightmap-gradient relief shading, banded hypsometric
+  palette (shelf/abyss/hadal distinct, hadal = dark magenta), crisp coastline
+  stroke, optional elevation contours (500/1000/2000 m), heatmap now modulated
+  by terrain shading so geography stays readable in heatmap mode.
+- **Granular control**: per-term toggles (gravity/rotation/tides), contours,
+  fog density/infall/twist, all in lil-gui folders.
+- **Minimap widget v1**: inset depth-grid (gravity-well style) bottom-right;
+  global view by default; city dropdown (Mariana, Everest, La Paz, Dead Sea,
+  Quito, Longyearbyen, …) or click-the-globe to focus; region span slider
+  (2–90°) + well-depth slider.
+
 ## Next sessions (prioritized)
+
+### Minimap widget v2 (from session 2 review)
+- [ ] Label overlay (place name, min/max ns/day in window, scale legend).
+- [ ] Smooth fly/lerp between regions; sync GUI dropdown when clicking globe.
+- [ ] Optional: render minimap with its own exaggeration control.
 
 ### 2. Visual fidelity pass
 - [ ] Load the pipeline GLB with GLTFLoader as an alternative "static relief"
@@ -66,8 +90,10 @@
 
 ## Known issues / debts
 - `THREE.Clock` deprecation warning (move to `THREE.Timer`).
-- Heightmap sampled at 8-bit in the browser (≈70 m elevation quantization);
-  consider decoding the 16-bit PNG via fetch + manual unpack, or a .bin Float32.
+- Fog tints the whole background violet at default density; consider fading
+  density with distance-from-camera or capping shell opacity.
+- z=4 averages peaks down (Everest reads ~6.7 km); regional crops at higher
+  zoom will fix where it matters.
 - Pillow `mode="I;16"` deprecation in `fetch_elevation.py` (breaks on Pillow 13,
   due 2026-10).
 - Poles are clamped (mercator cutoff ±85°); fill polar caps from ETOPO if it
