@@ -1,0 +1,7 @@
+node_modules/
+dist/
+data/*.npy
+data/*.png
+web/public/data/*.glb
+web/public/data/*.png
+.DS_Store

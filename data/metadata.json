@@ -1,0 +1,32 @@
+{
+  "source": "aws-terrain-tiles-terrarium-z3",
+  "projection": "equirectangular",
+  "width": 2048,
+  "height": 1024,
+  "elevation_min_m": -10020.0,
+  "elevation_max_m": 7796.0,
+  "encoding": "png16: meters = min + (value/65535) * (max - min)",
+  "earth_radius_m": 6371000.0,
+  "landmarks": {
+    "mariana_trench": {
+      "lat": 11.35,
+      "lon": 142.2
+    },
+    "everest": {
+      "lat": 27.99,
+      "lon": 86.93
+    },
+    "aconcagua": {
+      "lat": -32.65,
+      "lon": -70.01
+    },
+    "mid_atlantic_ridge": {
+      "lat": 0.0,
+      "lon": -25.0
+    },
+    "dead_sea": {
+      "lat": 31.5,
+      "lon": 35.5
+    }
+  }
+}
