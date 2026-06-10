@@ -221,45 +221,43 @@ export const fogFragment = /* glsl */ `
     return v;
   }
 
-  // one sample of the sinking-smoke field at a given flow phase.
-  // The noise domain is STRETCHED radially (samples collapse toward dir*k, so
-  // moving along r barely changes the lookup -> long radial filaments) and
-  // advected inward by the bounded phase offset.
-  float smokeSample(vec3 q, vec3 dir, float phase) {
-    vec3 base = mix(q * 2.8, dir * 2.8, 0.62);     // radial filament stretch
-    return fbm(base + dir * phase * 2.4);          // + : pattern falls inward
-  }
-
-  // density of the "universe fog" at point p (earth-fixed, earth radius = 1)
+  // Gravity rendered as infall streams: a FIXED angular web of tendrils
+  // (where matter falls) carrying glowing pulses that free-fall inward.
+  // Pulse motion comes from fract(k*r^3 + t): contours of constant phase obey
+  // dr/dt = -speed/(3k*r^2) -- genuine inverse-square acceleration toward the
+  // surface -- and fract() is exactly periodic, so the flow NEVER decays.
   float fogDensity(vec3 p) {
     float r = length(p);
     if (r < 1.01 || r > u_shellOuter) return 0.0;
 
-    // static differential spiral (shape, not time-sheared) + slow wobble
+    // static differential spiral (gravity "drags" the web around the spin axis)
     float ang = u_twist * 0.9 / (r * r) + 0.08 * sin(u_time * 0.07);
     float ca = cos(ang), sa = sin(ang);
     vec3 q = vec3(ca * p.x - sa * p.z, p.y, sa * p.x + ca * p.z);
     vec3 dir = q / r;
 
-    // infinite sinking: flow-map crossfade. Two samples advected by BOUNDED
-    // phase offsets, half a cycle apart; blending hides each reset. Speed
-    // rises ~1/r^2 toward the planet, so infall visibly accelerates.
-    float flow = u_time * u_flowSpeed * 0.12 / (r * r);
-    float pA = fract(flow), pB = fract(flow + 0.5);
-    float w = abs(pA - 0.5) * 2.0;
-    float d = mix(smokeSample(q, dir, pA), smokeSample(q, dir, pB), w);
+    // angular tendril web: fixed filament directions, two noise scales
+    float web = fbm(dir * 3.2);
+    float fine = fbm(dir * 8.5 + 31.7);
+    float tendril = smoothstep(0.42, 0.72, web) * (0.45 + 0.55 * smoothstep(0.35, 0.75, fine));
+    if (tendril < 0.01) return 0.0;
 
-    // high contrast: discrete filaments on near-black, not uniform glow
-    d = smoothstep(0.52, 0.82, d);
-    d = d * d;
+    // free-falling comet pulses along each tendril (decorrelated per direction)
+    float k = 0.55;
+    float u1 = k * r * r * r + u_time * u_flowSpeed * 0.22 + fine * 2.0;
+    float u2 = k * 2.7 * r * r * r + u_time * u_flowSpeed * 0.37 + web * 3.0;
+    float comet1 = pow(1.0 - fract(u1), 3.0);          // sharp head, inward tail
+    float comet2 = pow(1.0 - fract(u2), 4.0);
+    float streamGlow = 0.05 + 0.9 * comet1 + 0.55 * comet2;
 
-    // shape: nonlinear density boost near the planet, fade at shell edges
-    float nearBoost = pow(clamp((u_shellOuter - r) / (u_shellOuter - 1.0), 0.0, 1.0), 2.2);
+    // field strength envelope: bright at the surface but streams stay visible
+    // far out; soft fade at the shell edge
+    float strength = pow(1.0 / r, 1.6) * smoothstep(u_shellOuter, u_shellOuter * 0.75, r);
     float inner = smoothstep(1.01, 1.06, r);
     // spring-tide pulse: sun/moon alignment breathes the whole field
     float align = abs(dot(u_sunDir, u_moonDir));
-    float pulse = 1.0 + 0.25 * align * sin(u_time * 0.6);
-    return d * nearBoost * inner * pulse;
+    float breathe = 1.0 + 0.25 * align * sin(u_time * 0.6);
+    return tendril * streamGlow * strength * inner * breathe;
   }
 
   vec2 raySphere(vec3 ro, vec3 rd, float rad) { // returns (tNear, tFar), tFar<0 = miss
