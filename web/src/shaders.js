@@ -221,25 +221,37 @@ export const fogFragment = /* glsl */ `
     return v;
   }
 
+  // one sample of the sinking-smoke field at a given flow phase.
+  // The noise domain is STRETCHED radially (samples collapse toward dir*k, so
+  // moving along r barely changes the lookup -> long radial filaments) and
+  // advected inward by the bounded phase offset.
+  float smokeSample(vec3 q, vec3 dir, float phase) {
+    vec3 base = mix(q * 2.8, dir * 2.8, 0.62);     // radial filament stretch
+    return fbm(base + dir * phase * 2.4);          // + : pattern falls inward
+  }
+
   // density of the "universe fog" at point p (earth-fixed, earth radius = 1)
   float fogDensity(vec3 p) {
     float r = length(p);
     if (r < 1.01 || r > u_shellOuter) return 0.0;
 
-    // inward advection: noise domain slides outward along the radial direction
-    // (so features appear to fall inward), faster near the planet (~1/r^2)
-    float fall = u_time * u_flowSpeed / (r * r);
-    // fake angular momentum: twist around the spin axis, stronger when close
-    float ang = u_twist * u_time * 0.05 / (r * r);
+    // static differential spiral (shape, not time-sheared) + slow wobble
+    float ang = u_twist * 0.9 / (r * r) + 0.08 * sin(u_time * 0.07);
     float ca = cos(ang), sa = sin(ang);
     vec3 q = vec3(ca * p.x - sa * p.z, p.y, sa * p.x + ca * p.z);
     vec3 dir = q / r;
-    vec3 samp = q * 3.0 + dir * fall + vec3(0.0, u_time * 0.02, 0.0); // slow drift
 
-    float d = fbm(samp);
-    // radial streaking: stretch noise along r by sampling a second octave offset inward
-    d = 0.6 * d + 0.4 * fbm(samp + dir * 1.5);
-    d = smoothstep(0.45, 0.8, d);
+    // infinite sinking: flow-map crossfade. Two samples advected by BOUNDED
+    // phase offsets, half a cycle apart; blending hides each reset. Speed
+    // rises ~1/r^2 toward the planet, so infall visibly accelerates.
+    float flow = u_time * u_flowSpeed * 0.12 / (r * r);
+    float pA = fract(flow), pB = fract(flow + 0.5);
+    float w = abs(pA - 0.5) * 2.0;
+    float d = mix(smokeSample(q, dir, pA), smokeSample(q, dir, pB), w);
+
+    // high contrast: discrete filaments on near-black, not uniform glow
+    d = smoothstep(0.52, 0.82, d);
+    d = d * d;
 
     // shape: nonlinear density boost near the planet, fade at shell edges
     float nearBoost = pow(clamp((u_shellOuter - r) / (u_shellOuter - 1.0), 0.0, 1.0), 2.2);

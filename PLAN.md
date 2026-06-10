@@ -90,8 +90,8 @@
 
 ## Known issues / debts
 - `THREE.Clock` deprecation warning (move to `THREE.Timer`).
-- Fog tints the whole background violet at default density; consider fading
-  density with distance-from-camera or capping shell opacity.
+- Fog uses a flow-map crossfade (bounded phase, infinite sinking); slight
+  periodic blend softening every half cycle is the known trade-off.
 - z=4 averages peaks down (Everest reads ~6.7 km); regional crops at higher
   zoom will fix where it matters.
 - Pillow `mode="I;16"` deprecation in `fetch_elevation.py` (breaks on Pillow 13,
