@@ -143,6 +143,7 @@ const fogMat = new THREE.ShaderMaterial({
   fragmentShader: fogFragment,
   uniforms: {
     ...sharedUniforms,
+    ...elevUniforms, // mass-aware flow samples the terrain below
     u_fogDensity: { value: params.fogDensity },
     u_flowSpeed: { value: params.flowSpeed },
     u_twist: { value: params.twist },

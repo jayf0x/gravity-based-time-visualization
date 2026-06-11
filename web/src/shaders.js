@@ -207,14 +207,24 @@ export const fogVertex = /* glsl */ `
 
 export const fogFragment = /* glsl */ `
   precision highp float;
+  ${FIELD_GLSL}
+  ${ELEV_GLSL}
   varying vec3 vWorld;
-  uniform vec3  u_sunDir;
-  uniform vec3  u_moonDir;
   uniform float u_time;
+  uniform float u_exaggeration; // 1 .. 1e6 — scales infall speed/density/contrast
   uniform float u_fogDensity;   // overall opacity
   uniform float u_flowSpeed;    // inward advection rate
   uniform float u_twist;        // fake angular momentum
   uniform float u_shellOuter;   // outer shell radius
+
+  // time-field deviation (ps/s) of the surface point directly below p
+  float surfaceDeviation(vec3 dir) {
+    float lat = degrees(asin(clamp(dir.y, -1.0, 1.0)));
+    float lon = degrees(atan(dir.x, dir.z));
+    // flipY'd equirect: v=0 is lat -90 (same frame as the other shaders)
+    vec2 huv = vec2(fract(lon / 360.0 + 0.5), lat / 180.0 + 0.5);
+    return timeRateDeviation(dir, sampleElev(huv));
+  }
 
   // iq-style 3D value noise
   float hash(vec3 p) {
@@ -257,10 +267,19 @@ export const fogFragment = /* glsl */ `
     float tendril = smoothstep(0.42, 0.72, web) * (0.45 + 0.55 * smoothstep(0.35, 0.75, fine));
     if (tendril < 0.01) return 0.0;
 
+    // exaggeration lens: like every other layer, the fog scales with it
+    float ex = clamp(u_exaggeration / 1.0e6, 0.0, 1.0);
+
+    // mass-aware attraction: slow-time terrain below (dev < 0) pulls more
+    // flow; fast regions starve. Contrast grows with exaggeration.
+    float sdev = surfaceDeviation(p / r);
+    float mass = clamp(exp(-sdev * (0.6 + 3.4 * ex)), 0.12, 4.0);
+
     // free-falling comet pulses along each tendril (decorrelated per direction)
     float k = 0.55;
-    float u1 = k * r * r * r + u_time * u_flowSpeed * 0.22 + fine * 2.0;
-    float u2 = k * 2.7 * r * r * r + u_time * u_flowSpeed * 0.37 + web * 3.0;
+    float speed = u_flowSpeed * (0.25 + 1.75 * ex); // infall rate follows the lens
+    float u1 = k * r * r * r + u_time * speed * 0.22 + fine * 2.0;
+    float u2 = k * 2.7 * r * r * r + u_time * speed * 0.37 + web * 3.0;
     float comet1 = pow(1.0 - fract(u1), 3.0);          // sharp head, inward tail
     float comet2 = pow(1.0 - fract(u2), 4.0);
     float streamGlow = 0.05 + 0.9 * comet1 + 0.55 * comet2;
@@ -272,7 +291,7 @@ export const fogFragment = /* glsl */ `
     // spring-tide pulse: sun/moon alignment breathes the whole field
     float align = abs(dot(u_sunDir, u_moonDir));
     float breathe = 1.0 + 0.25 * align * sin(u_time * 0.6);
-    return tendril * streamGlow * strength * inner * breathe;
+    return tendril * streamGlow * strength * inner * breathe * mass * (0.35 + 1.05 * ex);
   }
 
   vec2 raySphere(vec3 ro, vec3 rd, float rad) { // returns (tNear, tFar), tFar<0 = miss
