@@ -73,9 +73,12 @@ export const earthVertex = /* glsl */ `
   varying float vDeviation;
 
   void main() {
-    vUv = uv;
+    // SphereGeometry's uv.x=0 sits at scene lon -90; the equirect heightmap
+    // expects lon -180 there. Shift by +0.25 so texture lon == geometric lon
+    // (raycaster/HUD/sun/minimap all use the geometric frame).
+    vUv = vec2(uv.x + 0.25, uv.y);
     vSphere = normalize(position);
-    vElev = sampleElev(uv);
+    vElev = sampleElev(vUv);
     vDeviation = timeRateDeviation(vSphere, vElev);
 
     // baked terrain relief (subtle, fixed) + field-driven displacement
@@ -295,7 +298,9 @@ export const fogFragment = /* glsl */ `
       // emission: faint blue haze far out -> violet -> warm filaments near earth
       float closeness = clamp((u_shellOuter - r) / (u_shellOuter - 1.0), 0.0, 1.0);
       vec3 emit = mix(vec3(0.03, 0.05, 0.13), vec3(0.45, 0.25, 0.85), pow(closeness, 2.0));
-      emit = mix(emit, vec3(1.0, 0.55, 0.25), pow(closeness, 6.0) * d);
+      // near-surface streams go hot cyan-white: contrasts against the red/violet
+      // surface heatmap instead of melting into it
+      emit = mix(emit, vec3(0.60, 0.95, 1.05), pow(closeness, 5.0) * clamp(d * 1.5, 0.0, 1.0));
       float a = 1.0 - exp(-d * dt * 18.0);
       acc += trans * a * emit;
       trans *= 1.0 - a * 0.85;

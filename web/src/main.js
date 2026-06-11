@@ -125,6 +125,7 @@ const fogMat = new THREE.ShaderMaterial({
   },
   transparent: true,
   depthWrite: false,
+  blending: THREE.AdditiveBlending, // streams glow over the surface
   side: THREE.BackSide, // works from outside and inside the shell
 });
 const fog = new THREE.Mesh(new THREE.SphereGeometry(SHELL_OUTER, 48, 24), fogMat);
