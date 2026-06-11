@@ -98,6 +98,19 @@ def stage_pixel():
             FAILS.append(f"pixel/{name}")
 
 
+def stage_react():
+    """Toolchain: dev server must transform JSX (react/R3F/jotai/babel chain)."""
+    import urllib.request
+    try:
+        body = urllib.request.urlopen(f"{BASE}/src/qa/smoke.jsx", timeout=10).read().decode()
+        ok = "jsx" in body and "import" in body
+    except Exception as e:
+        ok, body = False, str(e)
+    print(f"[react] {'PASS' if ok else 'FAIL'} smoke.jsx transform ({len(body)} bytes)")
+    if not ok:
+        FAILS.append("react/smoke")
+
+
 def stage_fly():
     """Fly mode: auto-dive at Everest; clamp must hold, HUD must track camera."""
     dom = run_chrome(f"{BASE}/?flytest=1")
@@ -140,7 +153,7 @@ def stage_micro():
 
 
 if __name__ == "__main__":
-    stages = sys.argv[1:] or ["pipeline", "runtime", "pixel", "fly", "fog", "micro"]
+    stages = sys.argv[1:] or ["pipeline", "react", "runtime", "pixel", "fly", "fog", "micro"]
     for s in stages:
         globals()[f"stage_{s}"]()
     print(("ALL PASS" if not FAILS else f"FAILED: {', '.join(FAILS)}"))
