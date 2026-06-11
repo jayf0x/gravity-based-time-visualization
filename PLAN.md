@@ -1,101 +1,103 @@
 # PLAN.md — Earth Time Field roadmap
 
-## Session log
+Outstanding work only. History lives in [CHANGELOG.md](CHANGELOG.md).
+Read [AGENTS.md](AGENTS.md) first for toolchain paths, conventions, and the
+headless-Chrome verification workflow.
 
-### Session 1 (2026-06-10) — bootstrap, all three layers POC'd ✅
-- **Pipeline (Workstream B)**: `pipeline/fetch_elevation.py` pulls real global
-  elevation+bathymetry from AWS Terrain Tiles (ETOPO1-derived terrarium tiles,
-  no GDAL, no API key), reprojects mercator→equirectangular with numpy, writes
-  16-bit + 8-bit heightmaps + `metadata.json`. Offline `--synthetic` fallback
-  (fBm + real landmarks). `pipeline/heightmap_to_glb.py` is a pure-Python
-  binary glTF 2.0 writer: 74k-vert displaced sphere, custom `_ELEVATION`
-  per-vertex attribute, 4.3 MB. Verified real range −10,020 m … +7,796 m.
-- **Math engine (Workstream C, the "Clock")**: `web/src/timeField.js` +
-  mirrored GLSL. Three physical terms in ps/s vs sea-level geoid:
-  gravitational (g·h/c²), kinematic ((ωRcosφ)²/2c², mean-centered), tidal
-  quadrupole (sun+moon). `web/src/ephemeris.js`: compact sun/moon ephemeris
-  (~1° accuracy) → earth-fixed direction + distance. Validated: Everest grav
-  +83 ns/day, Mariana −168 ns/day, pole +35 ns/day, June sun subpoint 23°N. ✓
-- **Visualization (Workstream A, the "Lens")**: Vite + Three.js (plain JS).
-  Custom ShaderMaterial globe (512×256 sphere, GPU heightmap displacement,
-  hypsometric coloring — zero texture assets), dilation heatmap with animated
-  isochron bands (violet=fast, red=slow), 16k-particle "clock field" whose
-  pulse rate follows local time rate, procedural starfield, day/night
-  terminator + atmosphere rim from real sun position, lil-gui (exaggeration
-  1→1e6, tidal boost, heatmap⇄natural mix, displacement, time speed),
-  ±6-month timeline scrubber, hover HUD with per-term ns/day breakdown.
-- Verified end-to-end via headless Chrome screenshots: coastlines, the
-  Mid-Atlantic Ridge seam, and the trench-red Pacific all read clearly.
+## TOP PRIORITY (user-reported, next session)
 
-### Session 2 (2026-06-10) — HQ clarity upgrade ✅
-- **Data**: pipeline bumped to z=4 (4096×2048, −10,467…+6,727 m). New
-  `heightmap_rg16.png` (R=high/G=low byte) gives lossless 16-bit elevation on
-  GPU *and* CPU — the 8-bit sampling debt is gone (HUD + shaders both decode it).
-- **Particles removed** → replaced with the **volumetric gravity fog**
-  (raymarched 3D value-noise volume on a backside shell, radial domain-shift
-  advection ~1/r², axis twist, near-planet nonlinear density boost, sun/moon
-  alignment pulse, ray-clipped against the globe; 36 jittered steps).
-- **Surface clarity**: heightmap-gradient relief shading, banded hypsometric
-  palette (shelf/abyss/hadal distinct, hadal = dark magenta), crisp coastline
-  stroke, optional elevation contours (500/1000/2000 m), heatmap now modulated
-  by terrain shading so geography stays readable in heatmap mode.
-- **Granular control**: per-term toggles (gravity/rotation/tides), contours,
-  fog density/infall/twist, all in lil-gui folders.
-- **Minimap widget v1**: inset depth-grid (gravity-well style) bottom-right;
-  global view by default; city dropdown (Mariana, Everest, La Paz, Dead Sea,
-  Quito, Longyearbyen, …) or click-the-globe to focus; region span slider
-  (2–90°) + well-depth slider.
+### 1. BUG — mouse / HUD / map still not in sync
+Despite the +0.25 uv calibration (commit 2341a38), the user still observes
+cursor↔topology mismatch. Don't trust prior reasoning — re-derive end to end.
 
-## Next sessions (prioritized)
+**Agent QA recipe (no human needed):** the alignment is verifiable from data
+alone. Add a debug hook (e.g. `window.__probe(lat, lon)` in `web/src/main.js`
+returning `{elev, deviation}` from the same path the HUD uses), then assert
+with known geography:
+- Himalaya (28.0N, 86.9E) elev ≫ +4000 m vs Ganges plain (25.0N, 83.0E) < 100 m.
+- Andes (-23.0S, -67.5W) > +3500 m vs Atacama Trench just west (-23.0S, -71.5W) < −5000 m.
+- Also verify the RENDER agrees: screenshot with camera aimed at a probe
+  point and check the pixel reads mountain-colored vs ocean-colored.
+Check every frame hop separately: heightmap row/col ↔ lat/lon (pipeline),
+texture uv ↔ geometry (shader +0.25), raycast point ↔ lat/lon (JS), minimap
+window ↔ heightmap uv (`fract(lon/360+0.5)` — note it has NO +0.25; the GLB
+pipeline builds its own uvs differently too). Suspect list: lon sign
+(atan2(x,z) convention), flipY, the GLB vs heightmap path divergence.
 
-### Minimap widget v2 (from session 2 review)
+### 2. FEATURE — street-view / fly mode on the surface
+Let the user toggle OrbitControls → FlyControls and fly low over the terrain.
+- Import from the locally bundled addon: `three/addons/controls/FlyControls.js`
+  (r184 API: constructor(camera, domElement); props `movementSpeed`,
+  `rollSpeed`, `dragToLook`, `autoForward`; call `controls.update(delta)` each
+  frame; dispose on toggle). NOTE: the user mentioned a reference copy at
+  `.keep/example.flycontrols.js` but that file is NOT in the repo — use the
+  bundled addon, it is current.
+- GUI toggle "fly mode"; swap controls cleanly (dispose old, create new),
+  keep camera position on switch.
+- Scale `movementSpeed` with altitude (slow near surface), clamp camera above
+  the displaced terrain radius (sample the 16-bit heightmap at camera lat/lon).
+- HUD should keep working in fly mode (probe directly under the camera
+  instead of mouse raycast when flying).
+- Far-future polish: increase sphere tessellation or regional GLB streaming
+  when low (ties into pipeline `--bbox` task below).
+
+### 3. BUG/RETHINK — gravity fog isn't informative
+User feedback: (a) `exaggeration` has zero effect on the fog — it's not wired
+to any fog uniform; (b) fog "just falls down" uniformly instead of being
+attracted to mass — it ignores the time field/terrain entirely; (c) it's only
+readable at the limb, invisible against the disk, so you can't see where it
+goes; (d) maybe fog is the wrong metaphor — consider "energy flow" instead.
+Concrete directions (pick pragmatically, prototype before polishing):
+- Wire `u_exaggeration` into fog: amplitude/speed/density of infall should
+  scale with it like every other lens does.
+- Mass-aware flow: modulate tendril density/brightness by the time-field
+  deviation of the surface point below (sample the heightmap with the
+  sub-point lat/lon — slow-time basins attract more flow). This makes the
+  fog genuinely show the field, not just 1/r².
+- Energy-flow alternative (likely better): GPU line/ribbon streamlines —
+  precompute ~2k geodesic streamline paths from far field to surface along
+  -∇Φ (including terrain perturbation), render as additive ribbons with
+  animated dash flow (shader `fract(s - t)`). Reads clearly against both
+  space AND the disk, unlike volume fog.
+- If keeping fog: add front-of-disk readability (e.g. darken surface behind
+  fog slightly, or screen-space composite), plus controls for stream count,
+  pulse rate, attraction strength.
+
+## Next up (after top priority)
+
+### Minimap widget v2
 - [ ] Label overlay (place name, min/max ns/day in window, scale legend).
 - [ ] Smooth fly/lerp between regions; sync GUI dropdown when clicking globe.
-- [ ] Optional: render minimap with its own exaggeration control.
+- [ ] Own exaggeration control.
 
-### 2. Visual fidelity pass
-- [ ] Load the pipeline GLB with GLTFLoader as an alternative "static relief"
-      mode (currently the GLB is produced + copied but the scene displaces a
-      plain sphere from the heightmap — both paths should be switchable).
-- [ ] Normals: recompute lighting normals from heightmap gradient in the
-      vertex/fragment shader (currently sphere normals → terrain is unlit).
-- [ ] EffectComposer: bloom on the violet/fast regions; volumetric glow pass
-      from the blueprint (screen-space heat shimmer).
-- [ ] Vector/field lines mode: animated dashed lines along ∇(dilation).
-- [ ] Night-side city lights from a real texture, atmosphere scattering shader.
+### Visual fidelity
+- [ ] GLTFLoader path for the pipeline GLB as a switchable "static relief" mode.
+- [ ] EffectComposer: bloom on fast/violet regions; screen-space heat shimmer.
+- [ ] Vector/field lines mode along ∇(dilation) (overlaps with fog rethink #3).
+- [ ] Night-side city lights texture; atmosphere scattering shader.
 
-### 3. Interaction & education
-- [ ] City picker (preset list with lat/lon/elev) + camera fly-to; compare two
-      cities: "clock A gains X ns/day on clock B".
-- [ ] Cumulative drift mode: integrate dilation over the scrubbed timeline and
-      show "if you'd stood here since <date>, you'd be X µs younger/older".
+### Interaction & education
+- [ ] Compare-two-cities mode ("clock A gains X ns/day on B").
+- [ ] Cumulative drift: integrate over scrubbed timeline ("X µs younger since <date>").
 - [ ] Click-to-pin probes with persistent readouts.
-- [ ] Moon render + lunar tide visualization toggle (the tidal bulge rotating
-      around the globe as the moon orbits is already computed — make it a mode).
+- [ ] Moon render + tidal-bulge visualization mode.
 
-### 4. Pipeline scale-up
-- [ ] `--zoom 4/5` tiling with on-disk tile cache (`data/tiles/`).
-- [ ] Regional high-res crops: `fetch_elevation.py --bbox lat0,lon0,lat1,lon1`
-      → per-region GLB for fly-down close-ups (Himalaya, Mariana).
-- [ ] Quantize/compress GLB (meshopt or Draco via gltf-transform CLI under bun).
-- [ ] Normal-map baking from the 16-bit heightmap (numpy Sobel → PNG).
+### Pipeline scale-up
+- [ ] On-disk tile cache (`data/tiles/`) + `--zoom 5`.
+- [ ] Regional crops: `--bbox lat0,lon0,lat1,lon1` → per-region GLB (needed for fly mode).
+- [ ] GLB compression (meshopt/Draco via gltf-transform under bun).
+- [ ] Normal-map baking (numpy Sobel → PNG) to replace per-fragment gradient.
 
-### 5. Physics depth (Workstream C)
-- [ ] Swap hand-rolled ephemeris for `astronomy-engine` (bun add) — keeps API,
-      raises accuracy; drive moon distance perigee/apogee tidal amplitude.
-- [ ] J2 oblateness term in the geoid reference (currently spherical geoid).
-- [ ] GRACE gravity-anomaly layer (placeholder hook exists conceptually: add a
-      second texture sampled in `FIELD_GLSL`).
-- [ ] Unit tests for timeField.js (bun test) pinning the validated numbers.
+### Physics depth
+- [ ] Swap hand-rolled ephemeris for `astronomy-engine`.
+- [ ] J2 oblateness in the geoid reference.
+- [ ] GRACE gravity-anomaly texture layer in `FIELD_GLSL`.
+- [ ] `bun test` unit tests pinning validated numbers (Everest +83 ns/day grav,
+      Mariana −168 ns/day total, pole +35 ns/day rot).
 
 ## Known issues / debts
 - `THREE.Clock` deprecation warning (move to `THREE.Timer`).
-- Fog uses a flow-map crossfade (bounded phase, infinite sinking); slight
-  periodic blend softening every half cycle is the known trade-off.
-- z=4 averages peaks down (Everest reads ~6.7 km); regional crops at higher
-  zoom will fix where it matters.
-- Pillow `mode="I;16"` deprecation in `fetch_elevation.py` (breaks on Pillow 13,
-  due 2026-10).
-- Poles are clamped (mercator cutoff ±85°); fill polar caps from ETOPO if it
-  ever matters visually.
-- Single 576 kB JS chunk; fine for now.
+- z=4 averages peaks down (Everest reads ~6.7 km globally).
+- Pillow `mode="I;16"` deprecation in `fetch_elevation.py` (breaks Pillow 13, 2026-10).
+- Mercator polar caps clamped at ±85°.
+- Single ~580 kB JS chunk.
