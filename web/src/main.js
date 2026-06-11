@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import GUI from 'lil-gui';
 import { sunDirection, moonDirection } from './ephemeris.js';
-import { timeRateDeviation, psPerSecToNsPerDay } from './timeField.js';
+import { timeRateDeviation, psPerSecToNsPerDay, latLonToVec } from './timeField.js';
 import {
   earthVertex, earthFragment,
   fogVertex, fogFragment,
@@ -64,6 +64,7 @@ const params = {
 
 let simTime = new Date();
 let scrubOffsetMs = 0;
+const urlq = new URLSearchParams(location.search);
 
 // ------------------------------------------------------- shared uniforms
 
@@ -104,6 +105,7 @@ const earthMat = new THREE.ShaderMaterial({
     u_displaceAmount: { value: params.displaceAmount },
     u_contours: { value: params.contours },
     u_texel: { value: new THREE.Vector2(1 / metadata.width, 1 / metadata.height) },
+    u_probe: { value: new THREE.Vector3(0, 0, 0) },
   },
 });
 
@@ -181,6 +183,44 @@ function sampleElev(lat, lon) {
   const x = Math.min(elevGrid.w - 1, Math.max(0, Math.round(((lon + 180) / 360) * (elevGrid.w - 1))));
   const y = Math.min(elevGrid.h - 1, Math.max(0, Math.round(((90 - lat) / 180) * (elevGrid.h - 1))));
   return elevGrid.data[y * elevGrid.w + x];
+}
+
+// sun/moon of the currently displayed instant, for code outside the rAF loop
+let curSun = sunDirection(simTime);
+let curMoon = moonDirection(simTime);
+
+const ptLatLon = (p) => [
+  Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) * 180 / Math.PI,
+  Math.atan2(p.x, p.z) * 180 / Math.PI,
+];
+
+// Vertex-shader displacement, mirrored in JS (earthVertex in shaders.js).
+function surfaceDisp(lat, lon, p) {
+  const elev = sampleElev(lat, lon);
+  const dev = timeRateDeviation(lat, elev, [p.x, p.y, p.z], curSun, curMoon,
+    params.tidalOn ? params.tidalBoost : 0).total;
+  const relief = 0.012 * (elev / 8000);
+  const fieldAmp = params.displaceAmount * (params.exaggeration / 1e6) * 0.18;
+  return { disp: relief + fieldAmp * dev, elev };
+}
+
+// The raycaster only sees the UNDISPLACED unit sphere; the rendered surface
+// sits at r = 1 + disp (up to ~3%), so a raw hit reads the wrong lat/lon near
+// the limb. Re-intersect against the locally displaced radius until stable.
+function refineSurfaceHit(ray) {
+  let r = 1, out = null;
+  for (let i = 0; i < 4; i++) {
+    const b = ray.origin.dot(ray.direction);
+    const c = ray.origin.lengthSq() - r * r;
+    const h = b * b - c;
+    if (h < 0) return out; // grazing ray slipped off the bigger sphere: keep last
+    const p = ray.origin.clone().addScaledVector(ray.direction, -b - Math.sqrt(h)).normalize();
+    const [lat, lon] = ptLatLon(p);
+    const { disp, elev } = surfaceDisp(lat, lon, p);
+    out = { p, lat, lon, elev };
+    r = 1 + disp;
+  }
+  return out;
 }
 
 // -------------------------------------------------------- minimap widget
@@ -277,23 +317,17 @@ addEventListener('pointermove', (e) => {
 addEventListener('click', (e) => {
   if (e.target !== renderer.domElement) return;
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObject(earth, false)[0];
+  const hit = refineSurfaceHit(raycaster.ray);
   if (!hit) return;
-  const p = hit.point.clone().normalize();
-  const lat = Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) * 180 / Math.PI;
-  const lon = Math.atan2(p.x, p.z) * 180 / Math.PI;
-  setRegion([lat, lon]);
+  setRegion([hit.lat, hit.lon]);
   params.city = 'Global view'; // dropdown no longer reflects the pin
 });
 
 function updateHud(sun, moon) {
   raycaster.setFromCamera(pointer, camera);
-  const hit = raycaster.intersectObject(earth, false)[0];
+  const hit = refineSurfaceHit(raycaster.ray);
   if (!hit) { hud.textContent = 'hover the globe… (click to focus minimap)'; return; }
-  const p = hit.point.clone().normalize();
-  const lat = Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) * 180 / Math.PI;
-  const lon = Math.atan2(p.x, p.z) * 180 / Math.PI;
-  const elev = sampleElev(lat, lon);
+  const { lat, lon, elev, p } = hit;
   const d = timeRateDeviation(lat, elev, [p.x, p.y, p.z], sun, moon, 1);
   const nsDay = psPerSecToNsPerDay(d.total);
   const cls = nsDay >= 0 ? 'fast' : 'slow';
@@ -313,18 +347,18 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
-  controls.update();
+  if (!qaCam) controls.update();
 
   simTime = new Date(simTime.getTime() + dt * params.timeSpeed * 1000);
   const displayTime = new Date(simTime.getTime() + scrubOffsetMs);
 
-  const sun = sunDirection(displayTime);
-  const moon = moonDirection(displayTime);
+  const sun = curSun = sunDirection(displayTime);
+  const moon = curMoon = moonDirection(displayTime);
   sharedUniforms.u_sunDir.value.fromArray(sun.dir);
   sharedUniforms.u_moonDir.value.fromArray(moon.dir);
   sharedUniforms.u_sunDist.value = sun.distanceM;
   sharedUniforms.u_moonDist.value = moon.distanceM;
-  sharedUniforms.u_time.value += dt;
+  sharedUniforms.u_time.value = frozenTime ?? sharedUniforms.u_time.value + dt;
 
   sunGlow.position.fromArray(sun.dir).multiplyScalar(25);
   moonMarker.position.fromArray(moon.dir).multiplyScalar(8);
@@ -353,6 +387,71 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
+
+// ------------------------------------------------- QA / debug hooks
+// Data-only verification of the alignment chain (see qa/check_alignment.py).
+
+let qaCam = false;       // true = a QA mode owns the camera, skip OrbitControls
+let frozenTime = null;   // non-null = deterministic u_time for frame-diff tests
+
+window.__probe = (lat, lon) => {
+  const elev = sampleElev(lat, lon);
+  const d = timeRateDeviation(lat, elev, latLonToVec(lat, lon), curSun, curMoon, 1);
+  return { elev, deviation: d.total };
+};
+
+window.__raycast = (ndcX, ndcY) => {
+  raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), camera);
+  const hit = refineSurfaceHit(raycaster.ray);
+  return hit ? { lat: hit.lat, lon: hit.lon, elev: hit.elev } : null;
+};
+
+function aimCamera(lat, lon, dist = 3.2) {
+  camera.position.set(...latLonToVec(lat, lon)).multiplyScalar(dist);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+}
+
+if (urlq.has('qa')) {
+  // ?qa=lat,lon;lat,lon… -> #qa-out JSON: HUD-path elev/deviation per point,
+  // plus a center-pixel raycast round-trip with the camera aimed at the point.
+  const results = urlq.get('qa').split(';').map((s) => {
+    const [lat, lon] = s.split(',').map(Number);
+    const r = window.__probe(lat, lon);
+    aimCamera(lat, lon);
+    const ray = window.__raycast(0, 0);
+    return { ...r, rayLat: ray?.lat, rayLon: ray?.lon };
+  });
+  const out = document.createElement('div');
+  out.id = 'qa-out';
+  out.style.display = 'none';
+  out.textContent = JSON.stringify(results);
+  document.body.appendChild(out);
+  camera.position.set(0, 1.1, 3.2); // restore for the visible render
+  camera.lookAt(0, 0, 0);
+}
+
+if (urlq.has('probe')) {
+  // ?probe=lat,lon -> camera straight at the point, shader paints a marker
+  // colored by ITS sampled elevation (red mountain / blue ocean).
+  const [lat, lon] = urlq.get('probe').split(',').map(Number);
+  earthMat.uniforms.u_probe.value.set(lat, lon, 1);
+  fog.visible = false;
+  qaCam = true;
+  aimCamera(lat, lon);
+}
+
+if (urlq.has('fogtest')) {
+  // ?fogtest=<exaggeration> -> fog only, deterministic time, for frame-diffs.
+  sharedUniforms.u_exaggeration.value = parseFloat(urlq.get('fogtest'));
+  earth.visible = false;
+  sunGlow.visible = moonMarker.visible = false;
+  scene.children.filter(o => o.isPoints).forEach(o => o.visible = false);
+  simTime = new Date('2026-01-01T00:00:00Z');
+  params.timeSpeed = 0;
+  frozenTime = 50;
+  qaCam = true;
+}
 
 setRegion(null);
 animate();

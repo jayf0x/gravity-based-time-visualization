@@ -100,6 +100,7 @@ export const earthFragment = /* glsl */ `
   uniform float u_contours;       // 0 = off, else meters between elevation contours
   uniform float u_time;
   uniform vec2  u_texel;          // 1/heightmap size
+  uniform vec3  u_probe;          // QA marker: (lat deg, lon deg, enabled)
 
   varying vec3 vSphere;
   varying vec2 vUv;
@@ -173,6 +174,17 @@ export const earthFragment = /* glsl */ `
     vec3 viewDir = normalize(cameraPosition - vSphere);
     float rim = pow(1.0 - clamp(dot(viewDir, vSphere), 0.0, 1.0), 3.0);
     col += vec3(0.25, 0.45, 1.0) * rim * 0.35 * (0.4 + 0.6 * light);
+
+    // QA probe marker: paints a dot at (lat,lon) colored by the elevation the
+    // SHADER samples there — red mountain / blue ocean / white indeterminate.
+    if (u_probe.z > 0.5) {
+      float la = radians(u_probe.x), lo = radians(u_probe.y);
+      vec3 P = vec3(cos(la) * sin(lo), sin(la), cos(la) * cos(lo));
+      if (dot(vSphere, P) > 0.9995) {
+        col = vElev > 1000.0 ? vec3(1.0, 0.0, 0.0)
+            : (vElev < -1000.0 ? vec3(0.0, 0.0, 1.0) : vec3(1.0));
+      }
+    }
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -332,7 +344,9 @@ export const minimapVertex = /* glsl */ `
     lat = clamp(lat, -89.9, 89.9);
     float la = radians(lat), lo = radians(lon);
     vec3 p = vec3(cos(la) * sin(lo), sin(la), cos(la) * cos(lo));
-    vec2 huv = vec2(fract(lon / 360.0 + 0.5), 1.0 - (lat / 180.0 + 0.5));
+    // texture is flipY'd on upload: v=0 is lat -90 (same frame the earth
+    // shader uses via SphereGeometry uv.y)
+    vec2 huv = vec2(fract(lon / 360.0 + 0.5), lat / 180.0 + 0.5);
     float elev = sampleElev(huv);
     vDeviation = timeRateDeviation(p, elev);
 
