@@ -26,12 +26,12 @@ pipeline builds its own uvs differently too). Suspect list: lon sign
 
 ### 2. FEATURE — street-view / fly mode on the surface
 Let the user toggle OrbitControls → FlyControls and fly low over the terrain.
-- Import from the locally bundled addon: `three/addons/controls/FlyControls.js`
-  (r184 API: constructor(camera, domElement); props `movementSpeed`,
-  `rollSpeed`, `dragToLook`, `autoForward`; call `controls.update(delta)` each
-  frame; dispose on toggle). NOTE: the user mentioned a reference copy at
-  `.keep/example.flycontrols.js` but that file is NOT in the repo — use the
-  bundled addon, it is current.
+- Import from the locally bundled addon: `three/addons/controls/FlyControls.js`.
+  A reference copy is at `.keep/flycontrols.js` — verified identical API to
+  the bundled r184 version (modern `Controls` base class: constructor(camera,
+  domElement); props `movementSpeed`, `rollSpeed`, `dragToLook`, `autoForward`;
+  call `controls.update(delta)` each frame; `dispose()` on toggle). Import
+  from the addon, use `.keep/` copy as offline reference only.
 - GUI toggle "fly mode"; swap controls cleanly (dispose old, create new),
   keep camera position on switch.
 - Scale `movementSpeed` with altitude (slow near surface), clamp camera above
