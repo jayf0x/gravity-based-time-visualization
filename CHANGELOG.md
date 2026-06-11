@@ -2,6 +2,48 @@
 
 Session history with context a future agent can act on. Newest first.
 
+## 2026-06-11 — Session 4 (alignment proven, fly mode, fog v4)
+
+### Commits
+- fog rework: u_exaggeration wired in (speed/density/contrast), mass-aware
+  infall via surfaceDeviation() heightmap sampling in the fog raymarch
+- fly mode: OrbitControls⇄FlyControls toggle, clearance-scaled speed,
+  terrain clamp (camera can't clip), sub-camera HUD while flying
+- alignment fix + `qa/check_alignment.py` (the regression gate)
+
+### Root causes of the desync (the actual bugs)
+- **Minimap sampled mirrored latitude**: heightmap texture is flipY'd on
+  upload, so v=0 = lat −90. Minimap used `1−(lat/180+0.5)`. The earth shader
+  was fine (SphereGeometry uv.y already matches the flipped frame). Any NEW
+  shader that maps lat→uv must use `lat/180 + 0.5`.
+- **Raycast displacement parallax**: the raycaster only sees the UNDISPLACED
+  unit-sphere geometry, but the vertex shader pushes the surface out by up to
+  ~3% (relief + field displacement). Near the limb that skews picked lat/lon
+  by degrees. Fix: `refineSurfaceHit()` re-intersects analytically against
+  the locally displaced radius (4 iterations); `surfaceDisp()` in main.js
+  mirrors the vertex-shader displacement — KEEP THEM IN SYNC.
+
+### QA harness (use it, don't screenshot-eyeball)
+`/opt/homebrew/bin/python3 qa/check_alignment.py [pipeline|runtime|pixel|fly|fog]`
+- pipeline: numpy landmark asserts on elevation_f32.npy
+- runtime: `?qa=lat,lon;…` → `window.__probe`/`__raycast` JSON in `#qa-out`
+- pixel: `?probe=lat,lon` → shader paints red/blue/white marker by ITS
+  sampled elevation; PIL reads center pixel
+- fly: `?flytest=1` auto-dives at Everest, asserts min clearance + HUD=camera
+- fog: `?fogtest=<exag>` fog-only deterministic frames; diff(1e3 vs 1e6)≈33
+
+### New lessons
+- **Don't gate headless QA on reaching frame N**: a `frames===240` one-shot
+  DOM write never fired under `--virtual-time-budget` (slow swiftshader
+  frames). Write/update the QA div EVERY frame; dump-dom reads last state.
+- First headless run after adding a new three/addons import triggers a vite
+  "new dependencies optimized" page reload mid-run — results garbage; rerun.
+- FIELD_GLSL declares u_sunDir/u_moonDir/u_time etc. — remove duplicate
+  uniform declarations when prepending it to a shader (fog hit this).
+- Fly-mode polish judged worth a human pass: speed feel, roll axis, and
+  low-altitude tessellation (8-bit-ish facets at 512×256 sphere) untested
+  by QA.
+
 ## 2026-06-10/11 — Sessions 1–3 (bootstrap → HQ → fixes)
 
 ### Commits

@@ -4,66 +4,22 @@ Outstanding work only. History lives in [CHANGELOG.md](CHANGELOG.md).
 Read [AGENTS.md](AGENTS.md) first for toolchain paths, conventions, and the
 headless-Chrome verification workflow.
 
-## TOP PRIORITY (user-reported, next session)
+## TOP PRIORITY
 
-### 1. BUG — mouse / HUD / map still not in sync
-Despite the +0.25 uv calibration (commit 2341a38), the user still observes
-cursor↔topology mismatch. Don't trust prior reasoning — re-derive end to end.
+(2026-06-11 session resolved all three: alignment bug fixed — minimap lat
+flip + raycast displacement parallax; fly mode shipped; fog wired to
+exaggeration + mass-aware. `qa/check_alignment.py` is the regression gate —
+run it after any shader/mapping change. Fly mode visual polish still needs a
+human pass — see CHANGELOG.)
 
-**Agent QA recipe (no human needed):** the alignment is verifiable from data
-alone. Add a debug hook (e.g. `window.__probe(lat, lon)` in `web/src/main.js`
-returning `{elev, deviation}` from the same path the HUD uses), then assert
-with known geography:
-- Himalaya (28.0N, 86.9E) elev ≫ +4000 m vs Ganges plain (25.0N, 83.0E) < 100 m.
-- Andes (-23.0S, -67.5W) > +3500 m vs Atacama Trench just west (-23.0S, -71.5W) < −5000 m.
-- Also verify the RENDER agrees: screenshot with camera aimed at a probe
-  point and check the pixel reads mountain-colored vs ocean-colored.
-Check every frame hop separately: heightmap row/col ↔ lat/lon (pipeline),
-texture uv ↔ geometry (shader +0.25), raycast point ↔ lat/lon (JS), minimap
-window ↔ heightmap uv (`fract(lon/360+0.5)` — note it has NO +0.25; the GLB
-pipeline builds its own uvs differently too). Suspect list: lon sign
-(atan2(x,z) convention), flipY, the GLB vs heightmap path divergence.
+### Fog follow-up (only if user still finds it unreadable)
+Energy-flow streamline alternative: GPU line/ribbon streamlines — precompute
+~2k geodesic paths from far field to surface along -∇Φ (incl. terrain
+perturbation), additive ribbons with animated dash flow (`fract(s - t)`).
+Reads against both space AND the disk. Mass-aware fog v4 shipped first; only
+build this if user feedback says fog still doesn't read.
 
-### 2. FEATURE — street-view / fly mode on the surface
-Let the user toggle OrbitControls → FlyControls and fly low over the terrain.
-- Import from the locally bundled addon: `three/addons/controls/FlyControls.js`.
-  A reference copy is at `.keep/flycontrols.js` — verified identical API to
-  the bundled r184 version (modern `Controls` base class: constructor(camera,
-  domElement); props `movementSpeed`, `rollSpeed`, `dragToLook`, `autoForward`;
-  call `controls.update(delta)` each frame; `dispose()` on toggle). Import
-  from the addon, use `.keep/` copy as offline reference only.
-- GUI toggle "fly mode"; swap controls cleanly (dispose old, create new),
-  keep camera position on switch.
-- Scale `movementSpeed` with altitude (slow near surface), clamp camera above
-  the displaced terrain radius (sample the 16-bit heightmap at camera lat/lon).
-- HUD should keep working in fly mode (probe directly under the camera
-  instead of mouse raycast when flying).
-- Far-future polish: increase sphere tessellation or regional GLB streaming
-  when low (ties into pipeline `--bbox` task below).
-
-### 3. BUG/RETHINK — gravity fog isn't informative
-User feedback: (a) `exaggeration` has zero effect on the fog — it's not wired
-to any fog uniform; (b) fog "just falls down" uniformly instead of being
-attracted to mass — it ignores the time field/terrain entirely; (c) it's only
-readable at the limb, invisible against the disk, so you can't see where it
-goes; (d) maybe fog is the wrong metaphor — consider "energy flow" instead.
-Concrete directions (pick pragmatically, prototype before polishing):
-- Wire `u_exaggeration` into fog: amplitude/speed/density of infall should
-  scale with it like every other lens does.
-- Mass-aware flow: modulate tendril density/brightness by the time-field
-  deviation of the surface point below (sample the heightmap with the
-  sub-point lat/lon — slow-time basins attract more flow). This makes the
-  fog genuinely show the field, not just 1/r².
-- Energy-flow alternative (likely better): GPU line/ribbon streamlines —
-  precompute ~2k geodesic streamline paths from far field to surface along
-  -∇Φ (including terrain perturbation), render as additive ribbons with
-  animated dash flow (shader `fract(s - t)`). Reads clearly against both
-  space AND the disk, unlike volume fog.
-- If keeping fog: add front-of-disk readability (e.g. darken surface behind
-  fog slightly, or screen-space composite), plus controls for stream count,
-  pulse rate, attraction strength.
-
-## Next up (after top priority)
+## Next up
 
 ### Minimap widget v2
 - [ ] Label overlay (place name, min/max ns/day in window, scale legend).
