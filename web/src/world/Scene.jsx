@@ -17,6 +17,7 @@ import Fog from './Fog';
 import SunMarker from './SunMarker';
 import MoonMarker from './MoonMarker';
 import HudUpdater from './HudUpdater';
+import Minimap from './Minimap';
 
 export default function Scene() {
   const { camera } = useThree();
@@ -59,6 +60,7 @@ export default function Scene() {
       <SunMarker />
       <MoonMarker />
       <HudUpdater />
+      <Minimap />
     </>
   );
 }
