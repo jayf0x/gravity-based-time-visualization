@@ -2,6 +2,28 @@
 
 Session history with context a future agent can act on. Newest first.
 
+## 2026-06-11 — Session 6 (React "Topology World" prep — no app code yet)
+
+Storm prep for the game-app migration (PLAN.md top-prio has the full
+architecture + migration order). Everything installed and PROVEN, no app
+code written:
+- Deps: react 19.2, react-dom, @react-three/fiber 9.6, drei 10.7,
+  @react-three/postprocessing 3, jotai 2.20, framer-motion 12,
+  lucide-react. Dev: @vitejs/plugin-react 6, @react-three/babel 1.0.2
+  (+@babel/core), tailwindcss 4.3 + @tailwindcss/vite, prettier, eslint 10
+  flat config (+react-hooks, config-prettier, globals). All on vite 8/bun.
+- web/vite.config.js: react({babel:{plugins:['@react-three/babel']}}) +
+  tailwindcss() + `@`→src alias + port pinned 5179. Verified: vanilla
+  build still green AND JSX transforms through the dev server.
+- qa/check_alignment.py new `react` stage: fetches src/qa/smoke.jsx
+  (react+fiber+jotai+framer JSX) through vite — proves the toolchain every
+  run. Full suite passes on the new toolchain.
+- .keep/terrain-example.ts: user's seeded fBm/erosion/rivers reference for
+  LIVE terrain detail around real topology (live twin of enhance_terrain).
+- Conventions source: ~/Documents/GitHub/jonatan-verstraete/site (jotai
+  atoms in store/, widgets registry, components/hooks/config layout).
+- AGENTS.md updated: JS/JSX-no-TS rule, react stack, lint/format scripts.
+
 ## 2026-06-11 — Session 5 (terrain detail synthesis)
 
 User feedback: peaks render as spikes / ranges as flat (z=4 is ~10 km/texel,

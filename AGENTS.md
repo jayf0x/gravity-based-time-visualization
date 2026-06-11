@@ -18,8 +18,15 @@ PLAN.md     concrete roadmap + session log — READ THIS FIRST
 ## Toolchain (exact paths matter on this machine)
 - Python: `/opt/homebrew/bin/python3` (3.14, has numpy + Pillow; **no GDAL**)
 - JS: `bun` at `/Users/me/.bun/bin/bun` — use bun, not npm/node
-- Dev server: `cd web && bun run dev` (vite)
-- Build check: `cd web && bun run build`
+- Dev server: `cd web && bun run dev` (vite, pinned to port 5179)
+- Build check: `cd web && bun run build`; also `bun run lint` / `bun run format`
+- React stack (since 2026-06-11, "Topology World" migration — see PLAN.md):
+  React 19, @react-three/fiber 9 + drei + postprocessing, jotai (the only
+  React⇄three bridge), framer-motion, lucide-react, tailwind 4
+  (@tailwindcss/vite), @vitejs/plugin-react with @react-three/babel.
+  `@` aliases `web/src`. Conventions mirror
+  `~/Documents/GitHub/jonatan-verstraete/site` (components/ widgets/ store/
+  hooks/ config/ pages-as-screens).
 
 ## Commands
 ```sh
@@ -38,7 +45,7 @@ cd web && bun run dev          # http://localhost:5173
   Everest grav term ≈ +83 ns/day, Mariana total ≈ −168 ns/day, pole rot ≈ +35 ns/day.
 
 ## Hard rules
-- **JS, no TypeScript** in `web/`.
+- **JS/JSX, no TypeScript** in `web/` (React allowed; .ts/.tsx are not).
 - `web/src/timeField.js` and the `FIELD_GLSL` block in `web/src/shaders.js`
   implement the SAME math. Change one -> change the other. Units: ps/s
   (picoseconds drift per second vs sea-level geoid). HUD displays ns/day (×86.4).
