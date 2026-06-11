@@ -5,10 +5,14 @@ import GUI from 'lil-gui';
 import { sunDirection, moonDirection } from './ephemeris.js';
 import { timeRateDeviation, psPerSecToNsPerDay, latLonToVec } from './timeField.js';
 import {
-  earthVertex, earthFragment,
-  fogVertex, fogFragment,
-  minimapVertex, minimapFragment,
-  starVertex, starFragment,
+  earthVertex,
+  earthFragment,
+  fogVertex,
+  fogFragment,
+  minimapVertex,
+  minimapFragment,
+  starVertex,
+  starFragment,
 } from './shaders.js';
 
 // ----------------------------------------------------------------- scene
@@ -23,7 +27,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
 camera.position.set(0, 1.1, 3.2);
 
-let orbit = null;   // exactly one of orbit/fly is live at a time
+let orbit = null; // exactly one of orbit/fly is live at a time
 let fly = null;
 
 function makeOrbit() {
@@ -54,13 +58,13 @@ function setFlyMode(on) {
 
 const CITIES = {
   'Global view': null,
-  'Mariana Trench': [11.35, 142.20, 'hadal'],
+  'Mariana Trench': [11.35, 142.2, 'hadal'],
   'Mt. Everest': [27.99, 86.93],
   'La Paz (3,640 m)': [-16.49, -68.15],
   'Dead Sea (-430 m)': [31.5, 35.5],
   'Quito (equator)': [-0.18, -78.47],
   'Longyearbyen (78°N)': [78.22, 15.65],
-  'Tokyo': [35.68, 139.69],
+  Tokyo: [35.68, 139.69],
   'New York': [40.71, -74.01],
   'Reykjavík (ridge)': [64.15, -21.94],
 };
@@ -70,19 +74,21 @@ const params = {
   tidalBoost: 20000,
   heatmapMix: 0.65,
   displaceAmount: 0.5,
-  contours: 0,            // meters between elevation contours, 0 = off
+  contours: 0, // meters between elevation contours, 0 = off
   flyMode: false,
-  microRelief: 0.6,       // shading-only sub-texel detail
-  gravOn: true, rotOn: true, tidalOn: true,
+  microRelief: 0.6, // shading-only sub-texel detail
+  gravOn: true,
+  rotOn: true,
+  tidalOn: true,
   timeSpeed: 600,
-  // gravity fog
-  fogOn: true,
+  // gravity fog (off by default: the earth is the main feature now)
+  fogOn: false,
   fogDensity: 0.9,
   flowSpeed: 2.2,
   twist: 1.5,
   // minimap widget
   city: 'Global view',
-  regionSpan: 30,         // degrees, square window when a place is selected
+  regionSpan: 30, // degrees, square window when a place is selected
   wellDepth: 0.22,
 };
 
@@ -98,14 +104,16 @@ const sharedUniforms = {
   u_sunDist: { value: 1.496e11 },
   u_moonDist: { value: 3.84e8 },
   u_tidalBoost: { value: params.tidalBoost },
-  u_gravOn: { value: 1 }, u_rotOn: { value: 1 }, u_tidalOn: { value: 1 },
+  u_gravOn: { value: 1 },
+  u_rotOn: { value: 1 },
+  u_tidalOn: { value: 1 },
   u_exaggeration: { value: params.exaggeration },
   u_time: { value: 0 },
 };
 
 // ----------------------------------------------------------- earth mesh
 
-const metadata = await fetch('/data/metadata.json').then(r => r.json());
+const metadata = await fetch('/data/metadata.json').then((r) => r.json());
 
 const heightTex = await new THREE.TextureLoader().loadAsync('/data/heightmap_rg16.png');
 heightTex.colorSpace = THREE.NoColorSpace;
@@ -158,6 +166,7 @@ const fogMat = new THREE.ShaderMaterial({
 });
 const fog = new THREE.Mesh(new THREE.SphereGeometry(SHELL_OUTER, 48, 24), fogMat);
 fog.renderOrder = 2;
+fog.visible = params.fogOn;
 scene.add(fog);
 
 // -------------------------------------------------------------- starfield
@@ -166,25 +175,36 @@ function makeStars(count = 4000) {
   const pos = new Float32Array(count * 3);
   const mag = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2;
-    const s = Math.sqrt(1 - u * u), r = 40 + Math.random() * 20;
+    const u = Math.random() * 2 - 1,
+      th = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u),
+      r = 40 + Math.random() * 20;
     pos.set([r * s * Math.sin(th), r * u, r * s * Math.cos(th)], i * 3);
     mag[i] = 0.4 + Math.random() ** 3 * 2.2;
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('a_mag', new THREE.BufferAttribute(mag, 1));
-  return new THREE.Points(g, new THREE.ShaderMaterial({
-    vertexShader: starVertex, fragmentShader: starFragment,
-    transparent: true, depthWrite: false,
-  }));
+  return new THREE.Points(
+    g,
+    new THREE.ShaderMaterial({
+      vertexShader: starVertex,
+      fragmentShader: starFragment,
+      transparent: true,
+      depthWrite: false,
+    }),
+  );
 }
 scene.add(makeStars());
 
-const sunGlow = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16),
-  new THREE.MeshBasicMaterial({ color: 0xfff2cc }));
-const moonMarker = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12),
-  new THREE.MeshBasicMaterial({ color: 0x9aa3b5 }));
+const sunGlow = new THREE.Mesh(
+  new THREE.SphereGeometry(0.35, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xfff2cc }),
+);
+const moonMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.07, 12, 12),
+  new THREE.MeshBasicMaterial({ color: 0x9aa3b5 }),
+);
 scene.add(sunGlow, moonMarker);
 
 // ---------------------------------------------- 16-bit elevation sampling
@@ -193,7 +213,8 @@ scene.add(sunGlow, moonMarker);
 const elevGrid = await (async () => {
   const img = heightTex.image;
   const cnv = document.createElement('canvas');
-  cnv.width = img.width; cnv.height = img.height;
+  cnv.width = img.width;
+  cnv.height = img.height;
   const ctx = cnv.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(img, 0, 0);
   const px = ctx.getImageData(0, 0, cnv.width, cnv.height).data;
@@ -206,8 +227,14 @@ const elevGrid = await (async () => {
 })();
 
 function sampleElev(lat, lon) {
-  const x = Math.min(elevGrid.w - 1, Math.max(0, Math.round(((lon + 180) / 360) * (elevGrid.w - 1))));
-  const y = Math.min(elevGrid.h - 1, Math.max(0, Math.round(((90 - lat) / 180) * (elevGrid.h - 1))));
+  const x = Math.min(
+    elevGrid.w - 1,
+    Math.max(0, Math.round(((lon + 180) / 360) * (elevGrid.w - 1))),
+  );
+  const y = Math.min(
+    elevGrid.h - 1,
+    Math.max(0, Math.round(((90 - lat) / 180) * (elevGrid.h - 1))),
+  );
   return elevGrid.data[y * elevGrid.w + x];
 }
 
@@ -216,15 +243,21 @@ let curSun = sunDirection(simTime);
 let curMoon = moonDirection(simTime);
 
 const ptLatLon = (p) => [
-  Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) * 180 / Math.PI,
-  Math.atan2(p.x, p.z) * 180 / Math.PI,
+  (Math.asin(THREE.MathUtils.clamp(p.y, -1, 1)) * 180) / Math.PI,
+  (Math.atan2(p.x, p.z) * 180) / Math.PI,
 ];
 
 // Vertex-shader displacement, mirrored in JS (earthVertex in shaders.js).
 function surfaceDisp(lat, lon, p) {
   const elev = sampleElev(lat, lon);
-  const dev = timeRateDeviation(lat, elev, [p.x, p.y, p.z], curSun, curMoon,
-    params.tidalOn ? params.tidalBoost : 0).total;
+  const dev = timeRateDeviation(
+    lat,
+    elev,
+    [p.x, p.y, p.z],
+    curSun,
+    curMoon,
+    params.tidalOn ? params.tidalBoost : 0,
+  ).total;
   const relief = 0.012 * (elev / 8000);
   const fieldAmp = params.displaceAmount * (params.exaggeration / 1e6) * 0.18;
   return { disp: relief + fieldAmp * dev, elev };
@@ -241,13 +274,17 @@ function terrainRadiusUnder(pos) {
 // sits at r = 1 + disp (up to ~3%), so a raw hit reads the wrong lat/lon near
 // the limb. Re-intersect against the locally displaced radius until stable.
 function refineSurfaceHit(ray) {
-  let r = 1, out = null;
+  let r = 1,
+    out = null;
   for (let i = 0; i < 4; i++) {
     const b = ray.origin.dot(ray.direction);
     const c = ray.origin.lengthSq() - r * r;
     const h = b * b - c;
     if (h < 0) return out; // grazing ray slipped off the bigger sphere: keep last
-    const p = ray.origin.clone().addScaledVector(ray.direction, -b - Math.sqrt(h)).normalize();
+    const p = ray.origin
+      .clone()
+      .addScaledVector(ray.direction, -b - Math.sqrt(h))
+      .normalize();
     const [lat, lon] = ptLatLon(p);
     const { disp, elev } = surfaceDisp(lat, lon, p);
     out = { p, lat, lon, elev };
@@ -299,39 +336,80 @@ function setRegion(latLon) {
 // ---------------------------------------------------------------- GUI
 
 const gui = new GUI({ title: 'Time Field' });
-gui.add(params, 'exaggeration', 1, 1e6, 1).name('exaggeration ×')
-  .onChange(v => sharedUniforms.u_exaggeration.value = v);
+gui
+  .add(params, 'exaggeration', 1, 1e6, 1)
+  .name('exaggeration ×')
+  .onChange((v) => (sharedUniforms.u_exaggeration.value = v));
 gui.add(params, 'timeSpeed', 0, 86400, 1).name('time speed (s/s)');
-gui.add(params, 'flyMode').name('fly mode (WASD+RF, drag to look)')
-  .onChange(setFlyMode);
+gui.add(params, 'flyMode').name('fly mode (WASD+RF, drag to look)').onChange(setFlyMode);
 
 const fTerms = gui.addFolder('field terms');
-fTerms.add(params, 'gravOn').name('gravity (altitude)').onChange(v => sharedUniforms.u_gravOn.value = v ? 1 : 0);
-fTerms.add(params, 'rotOn').name('rotation (latitude)').onChange(v => sharedUniforms.u_rotOn.value = v ? 1 : 0);
-fTerms.add(params, 'tidalOn').name('tides (sun+moon)').onChange(v => sharedUniforms.u_tidalOn.value = v ? 1 : 0);
-fTerms.add(params, 'tidalBoost', 1, 100000, 1).name('tidal boost ×').onChange(v => sharedUniforms.u_tidalBoost.value = v);
+fTerms
+  .add(params, 'gravOn')
+  .name('gravity (altitude)')
+  .onChange((v) => (sharedUniforms.u_gravOn.value = v ? 1 : 0));
+fTerms
+  .add(params, 'rotOn')
+  .name('rotation (latitude)')
+  .onChange((v) => (sharedUniforms.u_rotOn.value = v ? 1 : 0));
+fTerms
+  .add(params, 'tidalOn')
+  .name('tides (sun+moon)')
+  .onChange((v) => (sharedUniforms.u_tidalOn.value = v ? 1 : 0));
+fTerms
+  .add(params, 'tidalBoost', 1, 100000, 1)
+  .name('tidal boost ×')
+  .onChange((v) => (sharedUniforms.u_tidalBoost.value = v));
 
 const fSurf = gui.addFolder('surface');
-fSurf.add(params, 'heatmapMix', 0, 1).name('heatmap ⇄ natural').onChange(v => earthMat.uniforms.u_heatmapMix.value = v);
-fSurf.add(params, 'displaceAmount', 0, 1).name('displacement').onChange(v => earthMat.uniforms.u_displaceAmount.value = v);
-fSurf.add(params, 'microRelief', 0, 1).name('micro relief')
-  .onChange(v => earthMat.uniforms.u_micro.value = v);
-fSurf.add(params, 'contours', { off: 0, '500 m': 500, '1000 m': 1000, '2000 m': 2000 })
-  .name('elev contours').onChange(v => earthMat.uniforms.u_contours.value = v);
+fSurf
+  .add(params, 'heatmapMix', 0, 1)
+  .name('heatmap ⇄ natural')
+  .onChange((v) => (earthMat.uniforms.u_heatmapMix.value = v));
+fSurf
+  .add(params, 'displaceAmount', 0, 1)
+  .name('displacement')
+  .onChange((v) => (earthMat.uniforms.u_displaceAmount.value = v));
+fSurf
+  .add(params, 'microRelief', 0, 1)
+  .name('micro relief')
+  .onChange((v) => (earthMat.uniforms.u_micro.value = v));
+fSurf
+  .add(params, 'contours', { off: 0, '500 m': 500, '1000 m': 1000, '2000 m': 2000 })
+  .name('elev contours')
+  .onChange((v) => (earthMat.uniforms.u_contours.value = v));
 
 const fFog = gui.addFolder('gravity fog');
-fFog.add(params, 'fogOn').name('enabled').onChange(v => fog.visible = v);
-fFog.add(params, 'fogDensity', 0, 2).name('density').onChange(v => fogMat.uniforms.u_fogDensity.value = v);
-fFog.add(params, 'flowSpeed', 0, 8).name('infall speed').onChange(v => fogMat.uniforms.u_flowSpeed.value = v);
-fFog.add(params, 'twist', 0, 6).name('twist').onChange(v => fogMat.uniforms.u_twist.value = v);
+fFog
+  .add(params, 'fogOn')
+  .name('enabled')
+  .onChange((v) => (fog.visible = v));
+fFog
+  .add(params, 'fogDensity', 0, 2)
+  .name('density')
+  .onChange((v) => (fogMat.uniforms.u_fogDensity.value = v));
+fFog
+  .add(params, 'flowSpeed', 0, 8)
+  .name('infall speed')
+  .onChange((v) => (fogMat.uniforms.u_flowSpeed.value = v));
+fFog
+  .add(params, 'twist', 0, 6)
+  .name('twist')
+  .onChange((v) => (fogMat.uniforms.u_twist.value = v));
 
 const fMini = gui.addFolder('minimap widget');
-fMini.add(params, 'city', Object.keys(CITIES)).name('place')
-  .onChange(name => setRegion(CITIES[name]));
-fMini.add(params, 'regionSpan', 2, 90, 1).name('region span (°)')
+fMini
+  .add(params, 'city', Object.keys(CITIES))
+  .name('place')
+  .onChange((name) => setRegion(CITIES[name]));
+fMini
+  .add(params, 'regionSpan', 2, 90, 1)
+  .name('region span (°)')
   .onChange(() => setRegion(CITIES[params.city]));
-fMini.add(params, 'wellDepth', 0.02, 0.6).name('well depth')
-  .onChange(v => miniMat.uniforms.u_zScale.value = v);
+fMini
+  .add(params, 'wellDepth', 0.02, 0.6)
+  .name('well depth')
+  .onChange((v) => (miniMat.uniforms.u_zScale.value = v));
 
 // ------------------------------------------------------------ timeline
 
@@ -371,7 +449,10 @@ function updateHud(sun, moon) {
     raycaster.setFromCamera(pointer, camera);
     hit = refineSurfaceHit(raycaster.ray);
   }
-  if (!hit) { hud.textContent = 'hover the globe… (click to focus minimap)'; return; }
+  if (!hit) {
+    hud.textContent = 'hover the globe… (click to focus minimap)';
+    return;
+  }
   const { lat, lon, elev, p } = hit;
   const d = timeRateDeviation(lat, elev, [p.x, p.y, p.z], sun, moon, 1);
   const nsDay = psPerSecToNsPerDay(d.total);
@@ -402,8 +483,7 @@ function animate() {
       const r = camera.position.length();
       if (r < minR) camera.position.multiplyScalar(minR / r);
       if (flyStats) {
-        flyStats.minClear = Math.min(flyStats.minClear,
-          camera.position.length() - (minR - 0.004)); // clearance above terrain
+        flyStats.minClear = Math.min(flyStats.minClear, camera.position.length() - (minR - 0.004)); // clearance above terrain
       }
     } else if (orbit) {
       orbit.update();
@@ -413,8 +493,8 @@ function animate() {
   simTime = new Date(simTime.getTime() + dt * params.timeSpeed * 1000);
   const displayTime = new Date(simTime.getTime() + scrubOffsetMs);
 
-  const sun = curSun = sunDirection(displayTime);
-  const moon = curMoon = moonDirection(displayTime);
+  const sun = (curSun = sunDirection(displayTime));
+  const moon = (curMoon = moonDirection(displayTime));
   sharedUniforms.u_sunDir.value.fromArray(sun.dir);
   sharedUniforms.u_moonDir.value.fromArray(moon.dir);
   sharedUniforms.u_sunDist.value = sun.distanceM;
@@ -439,8 +519,11 @@ function animate() {
     }
     const [camLat, camLon] = ptLatLon(camera.position.clone().normalize());
     out.textContent = JSON.stringify({
-      minClear: flyStats.minClear, frames: flyStats.frames,
-      camLat, camLon, hud: hud.innerText,
+      minClear: flyStats.minClear,
+      frames: flyStats.frames,
+      camLat,
+      camLon,
+      hud: hud.innerText,
     });
   }
 
@@ -451,7 +534,8 @@ function animate() {
   renderer.render(scene, camera);
 
   // minimap inset (top-right, under the GUI)
-  const x = innerWidth - MINI.w - MINI.pad, y = MINI.pad;
+  const x = innerWidth - MINI.w - MINI.pad,
+    y = MINI.pad;
   renderer.setScissorTest(true);
   renderer.setScissor(x, y, MINI.w, MINI.h);
   renderer.setViewport(x, y, MINI.w, MINI.h);
@@ -469,9 +553,9 @@ addEventListener('resize', () => {
 // ------------------------------------------------- QA / debug hooks
 // Data-only verification of the alignment chain (see qa/check_alignment.py).
 
-let qaCam = false;       // true = a QA mode owns the camera, skip OrbitControls
-let frozenTime = null;   // non-null = deterministic u_time for frame-diff tests
-let flyStats = null;     // ?flytest collects clearance stats over 240 frames
+let qaCam = false; // true = a QA mode owns the camera, skip OrbitControls
+let frozenTime = null; // non-null = deterministic u_time for frame-diff tests
+let flyStats = null; // ?flytest collects clearance stats over 240 frames
 
 window.__probe = (lat, lon) => {
   const elev = sampleElev(lat, lon);
@@ -494,13 +578,16 @@ function aimCamera(lat, lon, dist = 3.2) {
 if (urlq.has('qa')) {
   // ?qa=lat,lon;lat,lon… -> #qa-out JSON: HUD-path elev/deviation per point,
   // plus a center-pixel raycast round-trip with the camera aimed at the point.
-  const results = urlq.get('qa').split(';').map((s) => {
-    const [lat, lon] = s.split(',').map(Number);
-    const r = window.__probe(lat, lon);
-    aimCamera(lat, lon);
-    const ray = window.__raycast(0, 0);
-    return { ...r, rayLat: ray?.lat, rayLon: ray?.lon };
-  });
+  const results = urlq
+    .get('qa')
+    .split(';')
+    .map((s) => {
+      const [lat, lon] = s.split(',').map(Number);
+      const r = window.__probe(lat, lon);
+      aimCamera(lat, lon);
+      const ray = window.__raycast(0, 0);
+      return { ...r, rayLat: ray?.lat, rayLon: ray?.lon };
+    });
   const out = document.createElement('div');
   out.id = 'qa-out';
   out.style.display = 'none';
@@ -544,9 +631,10 @@ if (urlq.has('microtest')) {
 if (urlq.has('fogtest')) {
   // ?fogtest=<exaggeration> -> fog only, deterministic time, for frame-diffs.
   sharedUniforms.u_exaggeration.value = parseFloat(urlq.get('fogtest'));
+  fog.visible = true; // fog is off by default; this mode tests it in isolation
   earth.visible = false;
   sunGlow.visible = moonMarker.visible = false;
-  scene.children.filter(o => o.isPoints).forEach(o => o.visible = false);
+  scene.children.filter((o) => o.isPoints).forEach((o) => (o.visible = false));
   simTime = new Date('2026-01-01T00:00:00Z');
   params.timeSpeed = 0;
   frozenTime = 50;

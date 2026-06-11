@@ -6,7 +6,7 @@ import globals from 'globals';
 export default [
   { ignores: ['dist'] },
   js.configs.recommended,
-  reactHooks.configs['recommended-latest'],
+  reactHooks.configs.flat['recommended-latest'],
   prettier,
   {
     files: ['src/**/*.{js,jsx}'],

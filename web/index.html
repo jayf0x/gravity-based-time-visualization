@@ -3,45 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Earth Time Field</title>
-  <style>
-    :root { color-scheme: dark; }
-    html, body { margin: 0; height: 100%; overflow: hidden; background: #04050a; }
-    canvas { display: block; }
-    #hud {
-      position: fixed; left: 16px; bottom: 16px; z-index: 10;
-      font: 12px/1.5 "SF Mono", ui-monospace, monospace;
-      color: #cfd6e4; background: rgba(8, 10, 18, 0.72);
-      border: 1px solid rgba(120, 140, 200, 0.25);
-      border-radius: 8px; padding: 10px 14px; min-width: 270px;
-      backdrop-filter: blur(6px); pointer-events: none;
-      white-space: pre;
-    }
-    #hud .big { font-size: 16px; color: #fff; }
-    #hud .fast { color: #b48cff; }
-    #hud .slow { color: #ff6a5e; }
-    #title {
-      position: fixed; left: 16px; top: 14px; z-index: 10;
-      font: 600 13px/1.4 ui-monospace, monospace; letter-spacing: 0.18em;
-      color: rgba(200, 210, 235, 0.85); pointer-events: none;
-    }
-    #title small { display: block; font-weight: 400; letter-spacing: 0.04em; color: rgba(160,170,195,0.6); }
-    #timeline {
-      position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
-      width: min(520px, 60vw); z-index: 10; accent-color: #8a7bff;
-    }
-    #clock {
-      position: fixed; left: 50%; bottom: 44px; transform: translateX(-50%);
-      font: 11px ui-monospace, monospace; color: rgba(190,200,225,0.75); z-index: 10;
-      pointer-events: none;
-    }
-  </style>
+  <title>Topology World</title>
 </head>
 <body>
-  <div id="title">EARTH TIME FIELD<small>gravitational + kinematic + tidal dilation, exaggerated</small></div>
-  <div id="hud">hover the globe…</div>
-  <div id="clock"></div>
-  <input id="timeline" type="range" min="-1" max="1" step="0.0001" value="0" title="scrub ±6 months" />
-  <script type="module" src="/src/main.js"></script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

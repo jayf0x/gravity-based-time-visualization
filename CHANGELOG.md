@@ -2,6 +2,22 @@
 
 Session history with context a future agent can act on. Newest first.
 
+## 2026-06-11 — Session 6b (migration step 1: React owns the DOM)
+
+- index.html stripped to `<div id="root">`; overlay HTML/CSS moved to
+  React: components/Title.jsx, widgets/Hud.jsx, widgets/TimeScrubber.jsx,
+  styles/index.css (tailwind imported at top). Entry is src/main.jsx.
+- world/WorldCanvas.jsx escape hatch: dynamic-imports the unchanged vanilla
+  scene (src/main.js) AFTER the React overlay exists — main.js still binds
+  #hud/#clock/#timeline by id and appends its canvas to body. ESM cache
+  makes the boot once-only. Step 2 replaces this with R3F components.
+- Fog off by default (earth is the main feature); `?fogtest` re-enables it
+  for its QA stage. Title rebranded "TOPOLOGY WORLD".
+- eslint-plugin-react-hooks v7 gotcha: top-level `configs['recommended-
+  latest']` is legacy shape (plugins array) — use `configs.flat[...]`.
+- Prettier reformatted src/ (one-time churn). Full QA suite + build green.
+- PLAN.md fully rewritten around the game vision (vision/status/steps).
+
 ## 2026-06-11 — Session 6 (React "Topology World" prep — no app code yet)
 
 Storm prep for the game-app migration (PLAN.md top-prio has the full

@@ -1,115 +1,113 @@
-# PLAN.md — Earth Time Field roadmap
+# PLAN.md — Topology World roadmap
 
 Outstanding work only. History lives in [CHANGELOG.md](CHANGELOG.md).
 Read [AGENTS.md](AGENTS.md) first for toolchain paths, conventions, and the
-headless-Chrome verification workflow.
+QA workflow. Run `qa/check_alignment.py` after every scene/mapping change —
+it gates pipeline, runtime, shader, fly, fog, micro, and the React toolchain.
 
-## TOP PRIORITY — "Topology World" game app (React migration)
+## VISION (user-stated, 2026-06-11)
 
-User direction (2026-06-11): this becomes a game-like app — fun, modern,
-gamified UI (Brawl-Stars-chunky buttons, a bit of matrix vibes, not
-childish). The EARTH is the main feature; time dilation becomes one widget/
-cursor among several. Two play modes: **flight** or **orbit**.
+A game-like experience into the world — fun, not childish, modern gamified
+UI (Brawl-Stars-chunky buttons, a bit of matrix vibes). **The EARTH is the
+main feature**; time dilation is one widget/cursor among several. Two play
+modes: **flight** (fly through the world) or **orbit** (look at it). The
+world itself must look genuinely interesting: real topology dressed with
+generated terrain detail, good lighting, eventually clouds and forests.
 
-**Toolchain is PREPPED and verified** (see CHANGELOG session 6): React 19 +
-@react-three/fiber 9 + drei + postprocessing + jotai + framer-motion +
-lucide-react; vite config with @vitejs/plugin-react (+ @react-three/babel
-auto-memoization) + tailwind 4; prettier + eslint flat config; `@` → src
-alias; dev port pinned 5179. `qa/check_alignment.py` gained a `react` stage
-(JSX transform smoke via src/qa/smoke.jsx). ALL QA STAGES PASS on the new
-toolchain — keep it that way at every migration step.
+## STATUS
 
-### Target structure (mirrors ~/Documents/GitHub/jonatan-verstraete/site)
+- Toolchain: React 19 + R3F 9 + drei + postprocessing + jotai +
+  framer-motion + tailwind 4 installed and QA-proven (CHANGELOG session 6).
+- Migration step 1 DONE: React root owns the DOM; old index.html overlay
+  is React components (components/Title, widgets/Hud, widgets/TimeScrubber)
+  + styles/index.css (tailwind imported); the vanilla three scene mounts
+  via world/WorldCanvas.jsx escape hatch. Fog off by default. UI copy
+  rebranded "Topology World".
+- Scene itself is still vanilla `src/main.js` — that's migration step 2.
+
+## TOP PRIORITY — finish the React migration
+
+Target structure (mirrors ~/Documents/GitHub/jonatan-verstraete/site):
 ```
 web/src/
-  main.jsx, App.jsx       React root
-  world/                  R3F port of today's main.js scene
-    Earth.jsx  Fog.jsx  Stars.jsx  Minimap.jsx
-    controls/             OrbitMode / FlightMode (port FlyControls logic)
-    qaBridge.js           re-expose window.__probe/__raycast + ?qa modes
-  screens/ModeSelect/     init panel: location preset + red/blue mode buttons
-  widgets/                footer widgets: HoverInfo (lat/lon/elev/time-dev),
-                          Minimap, later TimeDeviation cursor — registry
-                          pattern like the reference repo's widgets/index
-  components/             GameButton, Panel, … (gamified styles)
-  store/                  jotai atoms — THE React⇄three bridge
-  hooks/  config/  styles/
+  main.jsx App.jsx        React root (done)
+  world/                  R3F scene (port of main.js)
+    Earth.jsx Fog.jsx Stars.jsx Minimap.jsx
+    controls/             OrbitMode / FlightMode
+    qaBridge.js           window.__probe/__raycast + ?qa/?probe/?fogtest/
+                          ?microtest/?flytest modes MUST survive the port
+  screens/ModeSelect/     init panel (see flow below)
+  widgets/                footer widgets, registry pattern
+  components/             GameButton, Panel, … gamified primitives
+  store/ hooks/ config/ styles/
 ```
 
-### Architecture decisions (made, follow them)
-- **jotai atoms bridge UI⇄scene.** React writes atoms; scene code reads via
-  `store.get(atom)` inside `useFrame` (no re-render churn) or subscribes for
-  rare changes. Never push per-frame data INTO React state; per-frame HUD
-  values go through a single throttled atom or direct DOM ref.
-- `modeAtom` ('flight'|'orbit') = atomWithStorage(sessionStorage). Location
-  optional, defaults to first preset. Mode screen shows on load when unset.
-- 4 starter locations (verified coords, already in CITIES): Tokyo
-  35.68/139.69, New York 40.71/-74.01, La Paz -16.49/-68.15, Reykjavík
-  64.15/-21.94.
-- Fog: DISABLED by default (params.fogOn=false), still toggleable.
-- Rebrand "time field" → "topology world" in UI copy/docs; time stays in
-  hover widget + future special cursors.
-- Quality selector = page reload with `?q=` param choosing model/texture
-  variant (deliberate: avoids WebGL memory leaks on hot swap).
-- Lighting upgrade: real DirectionalLight sun + shadows + postprocessing
-  (bloom) once the scene is R3F; current shader does its own lighting —
-  port carefully, don't double-light.
-- Live terrain generation: `.keep/terrain-example.ts` (fBm + erosion +
-  rivers, seeded) is the reference. Goal is NOT a seeded world but detail
-  generated AROUND the real topology data — the live twin of pipeline
-  enhance_terrain.py (same relief-modulated principle, user-tweakable
-  params). Translate depth+color into a real-ish looking world.
+### Step 2 — port the scene to R3F (the big one)
+- One component per scene object; uniforms/params move to jotai atoms.
+- **Bridge rule:** React writes atoms; scene reads via `store.get(atom)`
+  inside `useFrame` (no re-render churn). Per-frame outputs (hover data)
+  go to one throttled atom or a DOM ref — never React state per frame.
+- Port carefully, in this order, QA after each: earth mesh → starfield →
+  minimap inset (scissor render) → controls swap (orbit/fly) → fog →
+  QA bridge (`qaBridge.js`) → delete main.js.
+- Pitfalls from the vanilla code: renderer.autoClear=false + scissored
+  minimap pass (use createPortal/useFrame priority in R3F); top-level
+  awaits (metadata, heightmap decode) become suspense/loaders; THREE.Clock
+  deprecation — use R3F's clock.
 
-### Migration order (each step ends with full QA pass + build green)
-1. index.html → React root; mount current vanilla scene inside a React
-   shell unchanged (escape hatch: one component wrapping today's main.js).
-2. Port scene to R3F components; keep window.__ QA hooks alive (qaBridge).
-3. Mode-select screen + sessionStorage sync + footer/menu UI shell.
-4. Widgets: HoverInfo as widget (replaces HUD div), minimap as widget;
-   mobile flex/hide.
-5. Gamified styling pass (tailwind 4 + framer-motion micro-interactions).
-6. Lighting/shadows + bloom; then live terrain detail around topology.
+### Step 3 — game flow
+- **Mode-select screen** on load, centered panel: preset location (name +
+  coords, image later) + two chunky matrix-style buttons — RED = flight,
+  BLUE = orbit. Mode required, synced to sessionStorage
+  (`atomWithStorage`); location optional, defaults to first preset.
+- 4 starter locations (coords verified in CITIES): Tokyo 35.68/139.69,
+  New York 40.71/-74.01, La Paz -16.49/-68.15, Reykjavík 64.15/-21.94.
+- Start camera at the selected place (or good default position per mode).
+- **Footer** with info + widgets; bottom-right button reopens the menu
+  (change mode/location). Widgets flex/hide on mobile.
+- Hover info becomes a **widget**, built scalable: pluggable "cursors"
+  (first: time deviation; later: distance, biome, …).
+- Settings (lil-gui or custom panel) stays but reframed: earth/topology
+  first, time-lens controls in a sub-folder.
 
-### Later (user-stated future)
-- Clouds, seeded forests.
-- GLB compression (meshopt/Draco via gltf-transform under bun).
-- Quality presets behind the `?q=` reload.
+### Step 4 — make the world look interesting
+- **Lighting:** real DirectionalLight sun + shadow quality pass +
+  postprocessing bloom. The earth shader currently does its OWN lighting —
+  don't double-light; either keep shader lighting and skip scene lights on
+  the globe, or move to scene lighting deliberately.
+- **Live terrain generation around real topology** (ultimate goal): the
+  runtime twin of pipeline/enhance_terrain.py. Reference algorithm saved
+  at `.keep/terrain-example.ts` (fBm + erosion + rivers, parameterized).
+  NOT a seeded world: generate detail around the existing elevation data,
+  with user-tweakable params (gain/lacunarity/erosion/rivers…) so the user
+  can dial in the look and we keep perfecting defaults. Translate depth +
+  color into a real-ish looking world.
 
 ## Next up
 
-### Minimap widget v2
-- [ ] Label overlay (place name, min/max ns/day in window, scale legend).
-- [ ] Smooth fly/lerp between regions; sync GUI dropdown when clicking globe.
-- [ ] Own exaggeration control.
+- Quality selector: reloads page with `?q=` param choosing model/texture
+  variant (reload by design — avoids WebGL memory leaks).
+- Clouds; seeded forests.
+- GLB compression (meshopt/Draco via gltf-transform under bun).
+- Minimap v2: label overlay, smooth fly/lerp between regions, own
+  exaggeration control.
+- Compare-two-cities mode; cumulative drift readout; click-to-pin probes;
+  Moon + tidal-bulge mode (time-lens features, post-migration).
 
-### Visual fidelity
-- [ ] GLTFLoader path for the pipeline GLB as a switchable "static relief" mode.
-- [ ] EffectComposer: bloom on fast/violet regions; screen-space heat shimmer.
-- [ ] Vector/field lines mode along ∇(dilation) (overlaps with fog rethink #3).
-- [ ] Night-side city lights texture; atmosphere scattering shader.
+## Pipeline backlog
 
-### Interaction & education
-- [ ] Compare-two-cities mode ("clock A gains X ns/day on B").
-- [ ] Cumulative drift: integrate over scrubbed timeline ("X µs younger since <date>").
-- [ ] Click-to-pin probes with persistent readouts.
-- [ ] Moon render + tidal-bulge visualization mode.
-
-### Pipeline scale-up
-- [ ] On-disk tile cache (`data/tiles/`) + `--zoom 5`.
-- [ ] Regional crops: `--bbox lat0,lon0,lat1,lon1` → per-region GLB (needed for fly mode).
-- [ ] GLB compression (meshopt/Draco via gltf-transform under bun).
-- [ ] Normal-map baking (numpy Sobel → PNG) to replace per-fragment gradient.
-
-### Physics depth
-- [ ] Swap hand-rolled ephemeris for `astronomy-engine`.
-- [ ] J2 oblateness in the geoid reference.
-- [ ] GRACE gravity-anomaly texture layer in `FIELD_GLSL`.
-- [ ] `bun test` unit tests pinning validated numbers (Everest +83 ns/day grav,
-      Mariana −168 ns/day total, pole +35 ns/day rot).
+- Tile cache (`data/tiles/`) + `--zoom 5`; regional `--bbox` crops →
+  per-region GLB (needed for low flight); normal-map baking.
+- Swap hand-rolled ephemeris for `astronomy-engine`; J2 oblateness; GRACE
+  gravity-anomaly layer; `bun test` pinning validated numbers (Everest
+  +83 ns/day grav, Mariana −168 total, pole +35 rot).
 
 ## Known issues / debts
-- `THREE.Clock` deprecation warning (move to `THREE.Timer`).
+
+- `THREE.Clock` deprecation warning (fix lands with the R3F port).
 - z=4 averages peaks down (Everest reads ~6.7 km globally).
-- Pillow `mode="I;16"` deprecation in `fetch_elevation.py` (breaks Pillow 13, 2026-10).
+- Pillow `mode="I;16"` deprecation in `fetch_elevation.py` (breaks
+  Pillow 13, 2026-10).
 - Mercator polar caps clamped at ±85°.
-- Single ~580 kB JS chunk.
+- Single large JS chunk (code-split during migration).
+- lil-gui still owns settings; replace with game UI eventually.

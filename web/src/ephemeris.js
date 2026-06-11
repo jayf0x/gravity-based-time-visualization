@@ -15,25 +15,21 @@ function julianDay(date) {
 function gmst(jd) {
   const t = (jd - 2451545.0) / 36525.0;
   let g = 280.46061837 + 360.98564736629 * (jd - 2451545.0) + 0.000387933 * t * t;
-  return ((g % 360) + 360) % 360 * DEG;
+  return (((g % 360) + 360) % 360) * DEG;
 }
 
 // Equatorial (RA/dec) -> earth-fixed unit vector
 function equatorialToEarthFixed(ra, dec, jd) {
   const lon = ra - gmst(jd); // local hour angle convention -> east longitude of sub-point
-  return [
-    Math.cos(dec) * Math.sin(lon),
-    Math.sin(dec),
-    Math.cos(dec) * Math.cos(lon),
-  ];
+  return [Math.cos(dec) * Math.sin(lon), Math.sin(dec), Math.cos(dec) * Math.cos(lon)];
 }
 
 export function sunDirection(date) {
   const jd = julianDay(date);
   const n = jd - 2451545.0;
-  const L = (280.460 + 0.9856474 * n) % 360 * DEG;        // mean longitude
-  const g = (357.528 + 0.9856003 * n) % 360 * DEG;        // mean anomaly
-  const lambda = L + (1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * DEG; // ecliptic lon
+  const L = ((280.46 + 0.9856474 * n) % 360) * DEG; // mean longitude
+  const g = ((357.528 + 0.9856003 * n) % 360) * DEG; // mean anomaly
+  const lambda = L + (1.915 * Math.sin(g) + 0.02 * Math.sin(2 * g)) * DEG; // ecliptic lon
   const eps = 23.439 * DEG;
   const ra = Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda));
   const dec = Math.asin(Math.sin(eps) * Math.sin(lambda));
@@ -45,9 +41,9 @@ export function moonDirection(date) {
   const jd = julianDay(date);
   const t = (jd - 2451545.0) / 36525.0;
   // Simplified lunar theory (largest terms only)
-  const Lp = (218.316 + 481267.8813 * t) * DEG;  // mean longitude
-  const M = (134.963 + 477198.8676 * t) * DEG;   // mean anomaly
-  const F = (93.272 + 483202.0175 * t) * DEG;    // argument of latitude
+  const Lp = (218.316 + 481267.8813 * t) * DEG; // mean longitude
+  const M = (134.963 + 477198.8676 * t) * DEG; // mean anomaly
+  const F = (93.272 + 483202.0175 * t) * DEG; // argument of latitude
   const lambda = Lp + 6.289 * DEG * Math.sin(M);
   const beta = 5.128 * DEG * Math.sin(F);
   const distM = (385001 - 20905 * Math.cos(M)) * 1000;
