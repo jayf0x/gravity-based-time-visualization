@@ -2,6 +2,27 @@
 
 Session history with context a future agent can act on. Newest first.
 
+## 2026-06-11 — Session 5 (terrain detail synthesis)
+
+User feedback: peaks render as spikes / ranges as flat (z=4 is ~10 km/texel,
+so a lone seamount is one texel). Two-layer fix:
+- **Pipeline stage 1.5** `pipeline/enhance_terrain.py` (in run.sh between
+  fetch and GLB): relief-modulated ridged fBm. Noise amplitude ∝ blurred
+  |∇h| of the REAL data (capped 650 m), faded near sea level so coastlines
+  never drift; lon-seamless lattice. Plains +~4 m, Everest +255 m of ridge
+  structure. Idempotent: keeps `elevation_raw_f32.npy`, refuses to stack
+  detail-on-detail (`--force` reapplies from raw). Asserts the QA landmarks
+  itself before writing.
+- **Shader micro relief** (fragment-only, normals): 2-octave value noise at
+  ~3-7 km wavelength, amplitude ∝ real heightmap slope, `u_micro` slider in
+  surface folder. Geometry/HUD/raycast never see it — pure shading.
+- QA additions: `?microtest=<0..1>` deterministic close-up frame; micro
+  stage frame-diffs 0 vs 1 (got 1.33, bar 0.5). All other stages re-pass on
+  the enhanced data.
+- Lesson: global-view frame-diffs dilute close-range shading effects —
+  point the deterministic QA camera at the feature's use-case distance
+  (dist 1.6 over the Himalaya, not 3.2 global).
+
 ## 2026-06-11 — Session 4 (alignment proven, fly mode, fog v4)
 
 ### Commits

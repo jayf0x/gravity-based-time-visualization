@@ -72,6 +72,7 @@ const params = {
   displaceAmount: 0.5,
   contours: 0,            // meters between elevation contours, 0 = off
   flyMode: false,
+  microRelief: 0.6,       // shading-only sub-texel detail
   gravOn: true, rotOn: true, tidalOn: true,
   timeSpeed: 600,
   // gravity fog
@@ -129,6 +130,7 @@ const earthMat = new THREE.ShaderMaterial({
     u_contours: { value: params.contours },
     u_texel: { value: new THREE.Vector2(1 / metadata.width, 1 / metadata.height) },
     u_probe: { value: new THREE.Vector3(0, 0, 0) },
+    u_micro: { value: params.microRelief },
   },
 });
 
@@ -312,6 +314,8 @@ fTerms.add(params, 'tidalBoost', 1, 100000, 1).name('tidal boost ×').onChange(v
 const fSurf = gui.addFolder('surface');
 fSurf.add(params, 'heatmapMix', 0, 1).name('heatmap ⇄ natural').onChange(v => earthMat.uniforms.u_heatmapMix.value = v);
 fSurf.add(params, 'displaceAmount', 0, 1).name('displacement').onChange(v => earthMat.uniforms.u_displaceAmount.value = v);
+fSurf.add(params, 'microRelief', 0, 1).name('micro relief')
+  .onChange(v => earthMat.uniforms.u_micro.value = v);
 fSurf.add(params, 'contours', { off: 0, '500 m': 500, '1000 m': 1000, '2000 m': 2000 })
   .name('elev contours').onChange(v => earthMat.uniforms.u_contours.value = v);
 
@@ -524,6 +528,17 @@ if (urlq.has('flytest')) {
   aimCamera(27.99, 86.93, 1.03); // looking at origin = nose-diving into terrain
   fly.autoForward = true;
   flyStats = { minClear: Infinity, frames: 0 };
+}
+
+if (urlq.has('microtest')) {
+  // ?microtest=<0..1> -> deterministic globe-only frame for shading diffs
+  earthMat.uniforms.u_micro.value = parseFloat(urlq.get('microtest'));
+  fog.visible = false;
+  simTime = new Date('2026-01-01T00:00:00Z');
+  params.timeSpeed = 0;
+  frozenTime = 50;
+  qaCam = true;
+  aimCamera(27.99, 86.93, 1.6); // close over the Himalaya: micro's use case
 }
 
 if (urlq.has('fogtest')) {

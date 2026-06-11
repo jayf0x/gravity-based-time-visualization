@@ -101,6 +101,7 @@ export const earthFragment = /* glsl */ `
   uniform float u_time;
   uniform vec2  u_texel;          // 1/heightmap size
   uniform vec3  u_probe;          // QA marker: (lat deg, lon deg, enabled)
+  uniform float u_micro;          // 0..1 sub-texel shading relief
 
   varying vec3 vSphere;
   varying vec2 vUv;
@@ -131,11 +132,34 @@ export const earthFragment = /* glsl */ `
     return mix(mtn, snow, clamp((e - 3000.0) / 2500.0, 0.0, 1.0));
   }
 
+  // sub-texel procedural relief: 2-octave value noise, slope-modulated.
+  // Pure shading detail (normals only) — geometry and HUD never see it.
+  float hash2(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+  }
+  float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash2(i), hash2(i + vec2(1, 0)), f.x),
+               mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), f.x), f.y);
+  }
+  float microH(vec2 uv) {
+    return vnoise(uv * 1400.0) * 0.65 + vnoise(uv * 3100.0 + 17.3) * 0.35;
+  }
+
   // terrain-shaded normal from heightmap gradient (clarity > physical truth)
   vec3 terrainNormal() {
     float scale = 60.0; // relief shading strength
     float dx = sampleElev(vUv + vec2(u_texel.x, 0.0)) - sampleElev(vUv - vec2(u_texel.x, 0.0));
     float dy = sampleElev(vUv + vec2(0.0, u_texel.y)) - sampleElev(vUv - vec2(0.0, u_texel.y));
+
+    // micro relief rides on real slope: rugged where the data is rugged
+    float m = u_micro * min(length(vec2(dx, dy)), 1200.0);
+    if (m > 1.0) {
+      float e = 0.7 * u_texel.x;
+      dx += (microH(vUv + vec2(e, 0.0)) - microH(vUv - vec2(e, 0.0))) * m;
+      dy += (microH(vUv + vec2(0.0, e)) - microH(vUv - vec2(0.0, e))) * m;
+    }
     // tangent frame on sphere (east, north)
     vec3 east = normalize(vec3(vSphere.z, 0.0, -vSphere.x));
     vec3 north = cross(vSphere, east);

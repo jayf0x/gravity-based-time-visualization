@@ -117,20 +117,30 @@ def stage_fly():
     check("fly", "HUD lon = cam lon", abs(float(hm.group(2)) - res["camLon"]), "<", 0.1, unit="deg")
 
 
-def stage_fog():
-    """Exaggeration must visibly change the fog: frame-diff two shots."""
+def frame_diff(url_a, url_b):
     from PIL import Image, ImageChops
     shots = []
-    for ex in (1000, 1000000):
+    for url in (url_a, url_b):
         png = tempfile.mktemp(suffix=".png")
-        run_chrome(f"{BASE}/?fogtest={ex}", screenshot=png)
+        run_chrome(url, screenshot=png)
         shots.append(Image.open(png).convert("L"))
-    diff = np.asarray(ImageChops.difference(*shots), dtype=float)
-    check("fog", "exaggeration frame-diff", diff.mean(), ">", 1.0, unit="")
+    return np.asarray(ImageChops.difference(*shots), dtype=float).mean()
+
+
+def stage_fog():
+    """Exaggeration must visibly change the fog: frame-diff two shots."""
+    d = frame_diff(f"{BASE}/?fogtest=1000", f"{BASE}/?fogtest=1000000")
+    check("fog", "exaggeration frame-diff", d, ">", 1.0, unit="")
+
+
+def stage_micro():
+    """Micro relief slider must visibly change terrain shading."""
+    d = frame_diff(f"{BASE}/?microtest=0", f"{BASE}/?microtest=1")
+    check("micro", "micro-relief frame-diff", d, ">", 0.5, unit="")
 
 
 if __name__ == "__main__":
-    stages = sys.argv[1:] or ["pipeline", "runtime", "pixel", "fly", "fog"]
+    stages = sys.argv[1:] or ["pipeline", "runtime", "pixel", "fly", "fog", "micro"]
     for s in stages:
         globals()[f"stage_{s}"]()
     print(("ALL PASS" if not FAILS else f"FAILED: {', '.join(FAILS)}"))

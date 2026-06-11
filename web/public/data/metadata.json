@@ -1,10 +1,10 @@
 {
-  "source": "aws-terrain-tiles-terrarium-z4",
+  "source": "aws-terrain-tiles-terrarium-z4+detail-v1-s0.9",
   "projection": "equirectangular",
   "width": 4096,
   "height": 2048,
-  "elevation_min_m": -10467.0,
-  "elevation_max_m": 6727.0,
+  "elevation_min_m": -10204.056640625,
+  "elevation_max_m": 6981.724609375,
   "encoding": "png16: meters = min + (value/65535) * (max - min)",
   "earth_radius_m": 6371000.0,
   "landmarks": {
