@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { FlyControls } from 'three/addons/controls/FlyControls.js';
 import GUI from 'lil-gui';
 import { sunDirection, moonDirection } from './ephemeris.js';
 import { timeRateDeviation, psPerSecToNsPerDay, latLonToVec } from './timeField.js';
@@ -22,11 +23,32 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
 camera.position.set(0, 1.1, 3.2);
 
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.dampingFactor = 0.06;
-controls.minDistance = 1.3;
-controls.maxDistance = 12;
+let orbit = null;   // exactly one of orbit/fly is live at a time
+let fly = null;
+
+function makeOrbit() {
+  const c = new OrbitControls(camera, renderer.domElement);
+  c.enableDamping = true;
+  c.dampingFactor = 0.06;
+  c.minDistance = 1.02; // low enough that exiting fly mode near ground doesn't pop
+  c.maxDistance = 12;
+  return c;
+}
+orbit = makeOrbit();
+
+function setFlyMode(on) {
+  if (on && !fly) {
+    orbit.dispose();
+    orbit = null;
+    fly = new FlyControls(camera, renderer.domElement);
+    fly.rollSpeed = 0.5;
+    fly.dragToLook = true;
+  } else if (!on && fly) {
+    fly.dispose();
+    fly = null;
+    orbit = makeOrbit(); // camera position carries over untouched
+  }
+}
 
 // --------------------------------------------------------------- params
 
@@ -49,6 +71,7 @@ const params = {
   heatmapMix: 0.65,
   displaceAmount: 0.5,
   contours: 0,            // meters between elevation contours, 0 = off
+  flyMode: false,
   gravOn: true, rotOn: true, tidalOn: true,
   timeSpeed: 600,
   // gravity fog
@@ -204,6 +227,13 @@ function surfaceDisp(lat, lon, p) {
   return { disp: relief + fieldAmp * dev, elev };
 }
 
+// displaced surface radius directly beneath an arbitrary world position
+function terrainRadiusUnder(pos) {
+  const p = pos.clone().normalize();
+  const [lat, lon] = ptLatLon(p);
+  return 1 + surfaceDisp(lat, lon, p).disp;
+}
+
 // The raycaster only sees the UNDISPLACED unit sphere; the rendered surface
 // sits at r = 1 + disp (up to ~3%), so a raw hit reads the wrong lat/lon near
 // the limb. Re-intersect against the locally displaced radius until stable.
@@ -269,6 +299,8 @@ const gui = new GUI({ title: 'Time Field' });
 gui.add(params, 'exaggeration', 1, 1e6, 1).name('exaggeration ×')
   .onChange(v => sharedUniforms.u_exaggeration.value = v);
 gui.add(params, 'timeSpeed', 0, 86400, 1).name('time speed (s/s)');
+gui.add(params, 'flyMode').name('fly mode (WASD+RF, drag to look)')
+  .onChange(setFlyMode);
 
 const fTerms = gui.addFolder('field terms');
 fTerms.add(params, 'gravOn').name('gravity (altitude)').onChange(v => sharedUniforms.u_gravOn.value = v ? 1 : 0);
@@ -324,8 +356,16 @@ addEventListener('click', (e) => {
 });
 
 function updateHud(sun, moon) {
-  raycaster.setFromCamera(pointer, camera);
-  const hit = refineSurfaceHit(raycaster.ray);
+  let hit;
+  if (fly) {
+    // flying: read the point directly beneath the camera
+    const p = camera.position.clone().normalize();
+    const [lat, lon] = ptLatLon(p);
+    hit = { p, lat, lon, elev: sampleElev(lat, lon) };
+  } else {
+    raycaster.setFromCamera(pointer, camera);
+    hit = refineSurfaceHit(raycaster.ray);
+  }
   if (!hit) { hud.textContent = 'hover the globe… (click to focus minimap)'; return; }
   const { lat, lon, elev, p } = hit;
   const d = timeRateDeviation(lat, elev, [p.x, p.y, p.z], sun, moon, 1);
@@ -347,7 +387,23 @@ const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
-  if (!qaCam) controls.update();
+  if (!qaCam || fly) {
+    if (fly) {
+      // slow near the ground, fast in orbit; never sink below the terrain
+      const clearance = camera.position.length() - terrainRadiusUnder(camera.position);
+      fly.movementSpeed = THREE.MathUtils.clamp(clearance * 0.9, 0.015, 3);
+      fly.update(dt);
+      const minR = terrainRadiusUnder(camera.position) + 0.004;
+      const r = camera.position.length();
+      if (r < minR) camera.position.multiplyScalar(minR / r);
+      if (flyStats) {
+        flyStats.minClear = Math.min(flyStats.minClear,
+          camera.position.length() - (minR - 0.004)); // clearance above terrain
+      }
+    } else if (orbit) {
+      orbit.update();
+    }
+  }
 
   simTime = new Date(simTime.getTime() + dt * params.timeSpeed * 1000);
   const displayTime = new Date(simTime.getTime() + scrubOffsetMs);
@@ -365,6 +421,23 @@ function animate() {
 
   clockEl.textContent = displayTime.toUTCString().replace('GMT', 'UTC');
   updateHud(sun, moon);
+
+  if (flyStats) {
+    // refresh every frame; the headless dump just reads the last state
+    flyStats.frames++;
+    let out = document.getElementById('qa-out');
+    if (!out) {
+      out = document.createElement('div');
+      out.id = 'qa-out';
+      out.style.display = 'none';
+      document.body.appendChild(out);
+    }
+    const [camLat, camLon] = ptLatLon(camera.position.clone().normalize());
+    out.textContent = JSON.stringify({
+      minClear: flyStats.minClear, frames: flyStats.frames,
+      camLat, camLon, hud: hud.innerText,
+    });
+  }
 
   // main view
   renderer.setScissorTest(false);
@@ -393,6 +466,7 @@ addEventListener('resize', () => {
 
 let qaCam = false;       // true = a QA mode owns the camera, skip OrbitControls
 let frozenTime = null;   // non-null = deterministic u_time for frame-diff tests
+let flyStats = null;     // ?flytest collects clearance stats over 240 frames
 
 window.__probe = (lat, lon) => {
   const elev = sampleElev(lat, lon);
@@ -439,6 +513,16 @@ if (urlq.has('probe')) {
   fog.visible = false;
   qaCam = true;
   aimCamera(lat, lon);
+}
+
+if (urlq.has('flytest')) {
+  // ?flytest=1 -> enable fly mode just above Everest, auto-fly straight at the
+  // terrain for 240 frames; report min clearance + HUD/camera lat agreement.
+  setFlyMode(true);
+  params.flyMode = true;
+  aimCamera(27.99, 86.93, 1.03); // looking at origin = nose-diving into terrain
+  fly.autoForward = true;
+  flyStats = { minClear: Infinity, frames: 0 };
 }
 
 if (urlq.has('fogtest')) {

@@ -34,7 +34,7 @@ FAILS = []
 def check(stage, name, value, op, thr, unit="m"):
     ok = value > thr if op == ">" else value < thr
     mark = "PASS" if ok else "FAIL"
-    print(f"[{stage}] {mark} {name}: {value:.0f}{unit} (want {op} {thr})")
+    print(f"[{stage}] {mark} {name}: {value:.4g}{unit} (want {op} {thr})")
     if not ok:
         FAILS.append(f"{stage}/{name}")
 
@@ -98,6 +98,25 @@ def stage_pixel():
             FAILS.append(f"pixel/{name}")
 
 
+def stage_fly():
+    """Fly mode: auto-dive at Everest; clamp must hold, HUD must track camera."""
+    dom = run_chrome(f"{BASE}/?flytest=1")
+    m = re.search(r'id="qa-out"[^>]*>([^<]+)<', dom)
+    if not m:
+        print("[fly] FAIL no #qa-out (flytest never reached frame 240)")
+        FAILS.append("fly/dom")
+        return
+    res = json.loads(m.group(1))
+    check("fly", "min clearance", res["minClear"], ">", 0.002, unit="r")
+    hm = re.search(r"lat (-?[\d.]+)..?\s+lon (-?[\d.]+)", res["hud"])
+    if not hm:
+        print(f"[fly] FAIL HUD unparsable: {res['hud']!r}")
+        FAILS.append("fly/hud")
+        return
+    check("fly", "HUD lat = cam lat", abs(float(hm.group(1)) - res["camLat"]), "<", 0.1, unit="deg")
+    check("fly", "HUD lon = cam lon", abs(float(hm.group(2)) - res["camLon"]), "<", 0.1, unit="deg")
+
+
 def stage_fog():
     """Exaggeration must visibly change the fog: frame-diff two shots."""
     from PIL import Image, ImageChops
@@ -111,7 +130,7 @@ def stage_fog():
 
 
 if __name__ == "__main__":
-    stages = sys.argv[1:] or ["pipeline", "runtime", "pixel", "fog"]
+    stages = sys.argv[1:] or ["pipeline", "runtime", "pixel", "fly", "fog"]
     for s in stages:
         globals()[f"stage_{s}"]()
     print(("ALL PASS" if not FAILS else f"FAILED: {', '.join(FAILS)}"))
