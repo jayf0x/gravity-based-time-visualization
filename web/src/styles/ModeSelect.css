@@ -1,0 +1,119 @@
+.mode-select {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+}
+
+.mode-select .panel {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 2px solid #00d9ff;
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 500px;
+  text-align: center;
+  box-shadow: 0 0 40px rgba(0, 217, 255, 0.2);
+}
+
+.mode-select h1 {
+  font-size: 36px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: #00d9ff;
+  margin: 0 0 8px;
+  text-shadow: 0 0 20px rgba(0, 217, 255, 0.5);
+}
+
+.mode-select .subtitle {
+  font-size: 14px;
+  color: #aaa;
+  margin: 0 0 30px;
+  letter-spacing: 1px;
+}
+
+.mode-select .label {
+  font-size: 14px;
+  color: #00d9ff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 12px;
+}
+
+.location-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 30px;
+}
+
+.location-btn {
+  padding: 10px 16px;
+  background: rgba(0, 217, 255, 0.1);
+  border: 1px solid #00d9ff;
+  border-radius: 6px;
+  color: #00d9ff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.location-btn:hover {
+  background: rgba(0, 217, 255, 0.2);
+  box-shadow: 0 0 12px rgba(0, 217, 255, 0.3);
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.btn {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.2s ease;
+}
+
+.btn-flight {
+  background: #ff6b6b;
+  color: white;
+}
+
+.btn-flight:hover {
+  background: #ff8787;
+  box-shadow: 0 0 20px rgba(255, 107, 107, 0.4);
+  transform: scale(1.02);
+}
+
+.btn-orbit {
+  background: #0066ff;
+  color: white;
+}
+
+.btn-orbit:hover {
+  background: #1a75ff;
+  box-shadow: 0 0 20px rgba(0, 102, 255, 0.4);
+  transform: scale(1.02);
+}
+
+.mode-select .hint {
+  font-size: 12px;
+  color: #888;
+  margin: 0;
+  line-height: 1.5;
+}
