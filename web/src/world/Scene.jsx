@@ -10,6 +10,7 @@ import {
   timeSpeedAtom,
 } from '../store/atoms';
 import { sunDirection, moonDirection } from '../ephemeris';
+import '../world/qaBridge'; // Initialize QA hooks
 import Earth from './Earth';
 import Starfield from './Starfield';
 import Controls from './Controls';
