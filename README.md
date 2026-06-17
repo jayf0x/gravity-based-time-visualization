@@ -9,7 +9,7 @@ Time runs ~168 ns/day slower at the bottom of the Mariana Trench and
 costs another ~104 ns/day versus the poles. This project turns those invisible
 numbers into a living field on a real-topography globe.
 
-![Earth Time Field screenshot](docs/screenshot.png)
+![Earth Time Field screenshot](assets/preview.png)
 
 ## Quick start
 
